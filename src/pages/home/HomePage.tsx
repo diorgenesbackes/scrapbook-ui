@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { checkReadiness } from '../../services/readinessService'
+import { checkReadiness } from './readinessService'
 
 type ReadinessState = 'idle' | 'checking' | 'up' | 'down'
 
