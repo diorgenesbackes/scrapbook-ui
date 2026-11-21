@@ -26,7 +26,7 @@ for (( attempt = 0; attempt < 90; attempt++ )); do
     case "$status" in
         SUCCEED)
             curl --fail --silent --show-error --proto '=https' --retry 3 --max-time 20 "$UI_ORIGIN/release.json" |
-                jq -e --arg sha "$GITHUB_SHA" --arg version "$RELEASE_VERSION" \
+                jq -e --arg sha "${SITE_SHA:-${GITHUB_SHA:?}}" --arg version "${SITE_VERSION:-${RELEASE_VERSION:?}}" \
                     '.sha == $sha and .version == $version' >/dev/null
             exit 0
             ;;

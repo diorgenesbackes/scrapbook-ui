@@ -8,6 +8,6 @@ if [[ ! "$SITE_SHA256" =~ ^[0-9a-f]{64}$ || "$digest" != "$SITE_SHA256" || "$SIT
     exit 1
 fi
 unzip -p "$SITE_ARCHIVE" release.json |
-    jq -e --arg sha "${GITHUB_SHA:?}" --arg version "${RELEASE_VERSION:?}" '
+    jq -e --arg sha "${SITE_SHA:-${GITHUB_SHA:?}}" --arg version "${SITE_VERSION:-${RELEASE_VERSION:?}}" '
         . == {sha: $sha, version: $version}
     ' >/dev/null
