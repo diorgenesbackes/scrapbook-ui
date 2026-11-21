@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { showCivil } from './eventDates'
 import { getEvent } from './eventService'
+import { EventOpeningForm } from './EventOpeningForm'
 import cover from './default-cover.jpg'
 import './events.css'
 
@@ -29,8 +30,10 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
             <dt>Início dos envios</dt><dd>{showCivil(result.data.submissionOpensAt)}</dd>
             <dt>Encerramento de novos envios</dt><dd>{showCivil(result.data.submissionClosesAt)}</dd>
             <dt>Prazo para concluir envios iniciados</dt><dd>{showCivil(result.data.completionDeadlineAt)}</dd>
-            <dt>Abertura das lembranças</dt><dd>{result.data.opensOn ? showCivil(result.data.opensOn) : 'Imediata'}</dd>
+            <dt>Abertura das lembranças</dt><dd>{result.data.openingPolicy.opensOn ? showCivil(result.data.openingPolicy.opensOn) : 'Imediata'}</dd>
           </dl>
+          <EventOpeningForm event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
+            onAccessLost={kind => setResult({ kind })} />
         </>
       ) : (
         <>
