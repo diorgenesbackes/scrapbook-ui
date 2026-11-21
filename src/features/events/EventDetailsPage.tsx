@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { showCivil } from './eventDates'
 import { getEvent } from './eventService'
+import { EventDetailsForm } from './EventDetailsForm'
 import { EventOpeningForm } from './EventOpeningForm'
 import cover from './default-cover.jpg'
 import './events.css'
@@ -24,7 +25,7 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
           <h1>{result.data.name}</h1>
           <p><time dateTime={result.data.startsAt}>{showCivil(result.data.startsAt)}</time> · Horário de Brasília</p>
           <img className="event-cover" src={cover} alt="" width="880" height="495" />
-          <p>{result.data.welcomeMessage}</p>
+          <p className="event-welcome">{result.data.welcomeMessage}</p>
           <h2>Prazos do evento</h2>
           <dl>
             <dt>Início dos envios</dt><dd>{showCivil(result.data.submissionOpensAt)}</dd>
@@ -32,7 +33,9 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
             <dt>Prazo para concluir envios iniciados</dt><dd>{showCivil(result.data.completionDeadlineAt)}</dd>
             <dt>Abertura das lembranças</dt><dd>{result.data.openingPolicy.opensOn ? showCivil(result.data.openingPolicy.opensOn) : 'Imediata'}</dd>
           </dl>
-          <EventOpeningForm event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
+          <EventDetailsForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
+            onAccessLost={kind => setResult({ kind })} />
+          <EventOpeningForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
             onAccessLost={kind => setResult({ kind })} />
         </>
       ) : (

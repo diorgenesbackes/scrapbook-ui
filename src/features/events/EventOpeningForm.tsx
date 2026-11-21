@@ -9,6 +9,7 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
   onUpdated: (event: EventDetail) => void
   onAccessLost: (kind: 'expired' | 'not-found') => void
 }) {
+  const [expectedVersion, setExpectedVersion] = useState(event.version)
   const [mode, setMode] = useState(event.openingPolicy.mode)
   const [date, setDate] = useState(event.openingPolicy.opensOn ?? suggestOpeningDate(event.startsAt))
   const [status, setStatus] = useState<Status>('idle')
@@ -21,6 +22,7 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
     const latest = await getEvent(event.id, signal)
     if (signal.aborted) return
     if (latest.kind === 'ready') {
+      setExpectedVersion(latest.data.version)
       onUpdated(latest.data)
       setStatus(after)
     } else if (latest.kind === 'expired' || latest.kind === 'not-found') {
@@ -45,9 +47,10 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
   function save() {
     return run(async signal => {
       const response = await replaceEventOpening(event.id, { mode, opensOn: mode === 'scheduled' ? date : null },
-        event.version, signal)
+        expectedVersion, signal)
       if (signal.aborted) return
       if (response.kind === 'ready') {
+        setExpectedVersion(response.data.version)
         onUpdated(response.data)
         setMode(response.data.openingPolicy.mode)
         setDate(response.data.openingPolicy.opensOn ?? suggestOpeningDate(response.data.startsAt))
@@ -80,6 +83,7 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
     <section aria-labelledby="opening-title">
       <h2 id="opening-title">Configuração de abertura</h2>
       <p>Política atual: {current}</p>
+      {expectedVersion !== event.version && !locked && <p>Confira a política atual antes de salvar alterações.</p>}
       {locked && <p role="status">A data de abertura deste evento está travada.</p>}
       {once && <p>O prazo para novos envios terminou. Você pode fazer uma última mudança para uma data futura.</p>}
       <form onSubmit={submit} className="event-form" aria-busy={status === 'busy'}>

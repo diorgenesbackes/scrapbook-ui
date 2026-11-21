@@ -9,12 +9,15 @@ type OpeningPolicy = OpeningDraft & { state: 'flexible' | 'scheduled_locked' | '
 export type EventDetail = EventSummary & {
   version: string
   welcomeMessage: string
+  usesDefaultWelcomeMessage: boolean
+  canEditDetails: boolean
   submissionOpensAt: string
   submissionClosesAt: string
   completionDeadlineAt: string
   openingPolicy: OpeningPolicy
 }
-export type EventDraft = { name: string; startsAt: string; openingPolicy: OpeningDraft }
+export type DetailsDraft = { name: string; startsAt: string; welcomeMessage: string | null }
+export type EventDraft = DetailsDraft & { openingPolicy: OpeningDraft }
 type Result<T> =
   | { kind: 'ready'; data: T }
   | { kind: 'expired' | 'not-found' | 'conflict' | 'failed' | 'uncertain' }
@@ -47,6 +50,7 @@ function detail(payload: unknown): EventDetail | null {
       || (state !== 'flexible' && state !== 'scheduled_locked' && state !== 'immediate_once')
       || typeof canEdit !== 'boolean' || (opensOn !== null && typeof opensOn !== 'string')) return null
   return { ...event, version, welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt,
+    usesDefaultWelcomeMessage: value.usesDefaultWelcomeMessage !== false, canEditDetails: value.canEditDetails === true,
     openingPolicy: { mode, opensOn, state, canEdit } }
 }
 
@@ -84,13 +88,23 @@ export async function createEvent(draft: EventDraft, key: string, signal: AbortS
 
 export async function replaceEventOpening(id: string, draft: OpeningDraft, expectedVersion: string,
   signal: AbortSignal): Promise<Result<EventDetail> | { kind: 'locked' }> {
-  const result = await putJson(eventsPath + '/' + encodeURIComponent(id) + '/opening-policy',
+  return replaceEvent(id, 'opening-policy', draft, expectedVersion, 'EVENT_OPENING_LOCKED', signal)
+}
+
+export async function replaceEventDetails(id: string, draft: DetailsDraft, expectedVersion: string,
+  signal: AbortSignal): Promise<Result<EventDetail> | { kind: 'locked' }> {
+  return replaceEvent(id, 'details', draft, expectedVersion, 'EVENT_LOCKED', signal)
+}
+
+async function replaceEvent(id: string, section: 'opening-policy' | 'details', draft: OpeningDraft | DetailsDraft,
+  expectedVersion: string, lockCode: string, signal: AbortSignal): Promise<Result<EventDetail> | { kind: 'locked' }> {
+  const result = await putJson(eventsPath + '/' + encodeURIComponent(id) + '/' + section,
     { ...draft, expectedVersion }, signal)
   if (result.kind === 'http') {
     if (result.status === 401) return { kind: 'expired' }
     if (result.status === 404) return { kind: 'not-found' }
     if (result.status === 409) {
-      return object(result.payload)?.code === 'EVENT_OPENING_LOCKED' ? { kind: 'locked' } : { kind: 'conflict' }
+      return object(result.payload)?.code === lockCode ? { kind: 'locked' } : { kind: 'conflict' }
     }
     if (result.status === 400) return { kind: 'invalid', fields: Object.keys(object(object(result.payload)?.errors) ?? {}) }
   }

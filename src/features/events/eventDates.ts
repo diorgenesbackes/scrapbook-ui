@@ -13,3 +13,7 @@ export function showCivil(value: string): string {
   const formatted = date?.split('-').reverse().join('/') ?? ''
   return time ? formatted + ' às ' + time.slice(0, 5) : formatted
 }
+
+export function withCivilSeconds(value: string): string {
+  return value.length === 16 ? value + ':00' : value
+}
