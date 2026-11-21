@@ -7,6 +7,7 @@ export function App() {
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <header className="site-header">
         <a className="wordmark" href="/">Scrap Book</a>
+        <a className="events-nav" href="/meus-eventos">Meus eventos</a>
       </header>
       <AppRoutes pathname={window.location.pathname} diagnosticsEnabled={environment.diagnosticsEnabled} />
     </>
