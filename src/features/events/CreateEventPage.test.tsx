@@ -41,3 +41,16 @@ it('mantém os valores quando o servidor recusa a data de abertura', async () =>
   expect(screen.getByLabelText('Data de abertura das lembranças').getAttribute('aria-invalid')).toBe('true')
   expect(screen.getByLabelText('Nome do evento').getAttribute('value')).toBe('Festa sintética')
 })
+
+it('envia a escolha de abertura imediata sem data de abertura', async () => {
+  const create = vi.mocked(createEvent)
+  create.mockResolvedValue({ kind: 'uncertain' })
+  render(<CreateEventPage />)
+  fireEvent.change(screen.getByLabelText('Nome do evento'), { target: { value: 'Festa sintética' } })
+  fireEvent.change(screen.getByLabelText('Data e horário do evento (Brasília)'), { target: { value: '2032-02-29T01:30' } })
+  fireEvent.change(screen.getByLabelText('Modo de abertura'), { target: { value: 'immediate' } })
+  expect(screen.queryByLabelText('Data de abertura das lembranças')).toBeNull()
+  fireEvent.submit(screen.getByRole('button', { name: 'Criar evento' }).closest('form')!)
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+  expect(create.mock.calls[0]?.[0].openingPolicy).toEqual({ mode: 'immediate', opensOn: null })
+})

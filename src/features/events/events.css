@@ -12,9 +12,11 @@
 .event-form fieldset { border: 0; margin: 0 0 1rem; padding: 0; min-width: 0; }
 .event-form legend { font-weight: 700; }
 .event-form label { display: block; margin-block-start: 1rem; font-weight: 650; }
-.event-form input { display: block; width: 100%; min-height: 3rem; border: 1px solid #60665e; border-radius: 0.5rem; padding: 0.55rem; font: inherit; color: inherit; background: #fff; }
+.event-form input, .event-form select { display: block; width: 100%; min-height: 3rem; border: 1px solid #60665e; border-radius: 0.5rem; padding: 0.55rem; font: inherit; color: inherit; background: #fff; }
 .event-form [aria-invalid='true'] { border-color: #a13b32; }
 .event-form [role='alert'] { color: #891e25; }
 .event-form p { margin: 0.5rem 0 1rem; }
 .event-page dd { margin: 0 0 0.75rem; }
 .event-page dt { font-weight: 650; }
+.opening-dialog { width: min(32rem, calc(100% - 2rem)); border: 1px solid #60665e; border-radius: 0.75rem; padding: 1.25rem; color: #252823; }
+.opening-dialog::backdrop { background: rgb(0 0 0 / 0.5); }

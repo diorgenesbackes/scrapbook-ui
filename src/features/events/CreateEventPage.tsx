@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { suggestOpeningDate } from './eventDates'
-import { createEvent, type EventDraft } from './eventService'
+import { createEvent, type EventDraft, type OpeningMode } from './eventService'
 import cover from './default-cover.jpg'
 import './events.css'
 
@@ -13,6 +13,7 @@ type FormState =
 export function CreateEventPage() {
   const [name, setName] = useState('')
   const [startsAt, setStartsAt] = useState('')
+  const [mode, setMode] = useState<OpeningMode>('scheduled')
   const [customDate, setCustomDate] = useState<string | null>(null)
   const [state, setState] = useState<FormState>({ kind: 'idle' })
   const attempt = useRef<Attempt | null>(null)
@@ -32,7 +33,7 @@ export function CreateEventPage() {
       return null
     }
     const civil = startsAt.length === 16 ? startsAt + ':00' : startsAt
-    const draft: EventDraft = { name, startsAt: civil, openingPolicy: { mode: 'scheduled', opensOn: opensOn || null } }
+    const draft: EventDraft = { name, startsAt: civil, openingPolicy: { mode, opensOn: mode === 'scheduled' ? opensOn || null : null } }
     return { key: crypto.randomUUID(), draft }
   }
 
@@ -82,12 +83,20 @@ export function CreateEventPage() {
           <input id="event-start" type="datetime-local" value={startsAt} onChange={event => setStartsAt(event.target.value)} required
             aria-invalid={startInvalid} aria-describedby={startInvalid ? 'event-start-error' : undefined} />
           {startInvalid && <p id="event-start-error">Informe uma data e um horário válidos.</p>}
-          <label htmlFor="event-opening">Data de abertura das lembranças</label>
-          <input id="event-opening" type="date" value={opensOn} onChange={event => setCustomDate(event.target.value)}
-            aria-invalid={dateInvalid} aria-describedby="event-opening-help" />
-          <p id="event-opening-help">{dateInvalid
-            ? 'Escolha uma data futura depois do encerramento dos envios.'
-            : 'A sugestão é abrir as lembranças um ano após o evento.'}</p>
+          <label htmlFor="event-opening-mode">Modo de abertura</label>
+          <select id="event-opening-mode" value={mode}
+            onChange={event => setMode(event.target.value === 'immediate' ? 'immediate' : 'scheduled')}>
+            <option value="scheduled">Em uma data futura</option>
+            <option value="immediate">Imediata</option>
+          </select>
+          {mode === 'scheduled' && <>
+            <label htmlFor="event-opening">Data de abertura das lembranças</label>
+            <input id="event-opening" type="date" value={opensOn} onChange={event => setCustomDate(event.target.value)}
+              aria-invalid={dateInvalid} aria-describedby="event-opening-help" />
+            <p id="event-opening-help">{dateInvalid
+              ? 'Escolha uma data futura depois do encerramento dos envios.'
+              : 'A sugestão é abrir as lembranças um ano após o evento.'}</p>
+          </>}
         </fieldset>
         <section aria-label="Capa e boas-vindas">
           <img className="event-cover" src={cover} alt="" width="880" height="495" />

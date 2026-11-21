@@ -1,16 +1,20 @@
-import { getJson, postJson } from '../../lib/httpClient'
+import { getJson, postJson, putJson } from '../../lib/httpClient'
 
 const eventsPath = '/api/v1/events'
 
 export type EventSummary = { id: string; name: string; startsAt: string }
+export type OpeningMode = 'immediate' | 'scheduled'
+export type OpeningDraft = { mode: OpeningMode; opensOn: string | null }
+type OpeningPolicy = OpeningDraft & { state: 'flexible' | 'scheduled_locked' | 'immediate_once'; canEdit: boolean }
 export type EventDetail = EventSummary & {
+  version: string
   welcomeMessage: string
   submissionOpensAt: string
   submissionClosesAt: string
   completionDeadlineAt: string
-  opensOn: string | null
+  openingPolicy: OpeningPolicy
 }
-export type EventDraft = { name: string; startsAt: string; openingPolicy: { mode: 'scheduled'; opensOn: string | null } }
+export type EventDraft = { name: string; startsAt: string; openingPolicy: OpeningDraft }
 type Result<T> =
   | { kind: 'ready'; data: T }
   | { kind: 'expired' | 'not-found' | 'conflict' | 'failed' | 'uncertain' }
@@ -32,11 +36,18 @@ function detail(payload: unknown): EventDetail | null {
   const event = summary(value)
   if (!value || !event) return null
   const { welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt } = value
-  const opensOn = object(value.openingPolicy)?.opensOn
+  const policy = object(value.openingPolicy)
+  const version = value.version
+  if (!policy || typeof version !== 'string' || !/^[0-9]+$/.test(version)) return null
+  const { mode, opensOn, state, canEdit } = policy
   if (typeof welcomeMessage !== 'string' || typeof submissionOpensAt !== 'string'
       || typeof submissionClosesAt !== 'string' || typeof completionDeadlineAt !== 'string'
-      || (opensOn !== null && typeof opensOn !== 'string')) return null
-  return { ...event, welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt, opensOn }
+      || (mode !== 'immediate' && mode !== 'scheduled')
+      || (mode === 'scheduled' ? typeof opensOn !== 'string' : opensOn !== null)
+      || (state !== 'flexible' && state !== 'scheduled_locked' && state !== 'immediate_once')
+      || typeof canEdit !== 'boolean' || (opensOn !== null && typeof opensOn !== 'string')) return null
+  return { ...event, version, welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt,
+    openingPolicy: { mode, opensOn, state, canEdit } }
 }
 
 export async function listEvents(cursor: string | null, signal: AbortSignal): Promise<Result<{ items: EventSummary[]; nextCursor: string | null }>> {
@@ -69,4 +80,20 @@ export async function createEvent(draft: EventDraft, key: string, signal: AbortS
   }
   const data = result.kind === 'ok' ? detail(result.payload) : null
   return data ? { kind: 'ready', data } : { kind: 'uncertain' }
+}
+
+export async function replaceEventOpening(id: string, draft: OpeningDraft, expectedVersion: string,
+  signal: AbortSignal): Promise<Result<EventDetail> | { kind: 'locked' }> {
+  const result = await putJson(eventsPath + '/' + encodeURIComponent(id) + '/opening-policy',
+    { ...draft, expectedVersion }, signal)
+  if (result.kind === 'http') {
+    if (result.status === 401) return { kind: 'expired' }
+    if (result.status === 404) return { kind: 'not-found' }
+    if (result.status === 409) {
+      return object(result.payload)?.code === 'EVENT_OPENING_LOCKED' ? { kind: 'locked' } : { kind: 'conflict' }
+    }
+    if (result.status === 400) return { kind: 'invalid', fields: Object.keys(object(object(result.payload)?.errors) ?? {}) }
+  }
+  const data = result.kind === 'ok' ? detail(result.payload) : null
+  return data ? { kind: 'ready', data } : { kind: 'failed' }
 }
