@@ -17,6 +17,14 @@ export function postJson(path: string, body: unknown, key: string, signal: Abort
   }, signal)
 }
 
+export function putJson(path: string, body: unknown, signal: AbortSignal): Promise<JsonResult> {
+  return requestJson(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, signal)
+}
+
 async function requestJson(path: string, options: {
   method?: string
   headers?: Record<string, string>
