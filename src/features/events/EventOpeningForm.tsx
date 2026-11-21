@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { announceOpeningChange } from './eventOpeningUpdates'
 import { showCivil, suggestOpeningDate } from './eventDates'
 import { getEvent, replaceEventOpening, type EventDetail } from './eventService'
 
@@ -55,6 +56,7 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
         setMode(response.data.openingPolicy.mode)
         setDate(response.data.openingPolicy.opensOn ?? suggestOpeningDate(response.data.startsAt))
         setStatus('saved')
+        if (response.data.version !== expectedVersion) announceOpeningChange(event.id)
       } else if (response.kind === 'conflict' || response.kind === 'locked') {
         await refreshVersion(signal, response.kind)
       } else if (response.kind === 'expired' || response.kind === 'not-found') {
