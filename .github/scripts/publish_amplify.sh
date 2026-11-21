@@ -6,17 +6,10 @@ source .github/scripts/release_support.sh
 [[ "$AMPLIFY_APP_ID" =~ ^[a-z0-9]+$ && "$AMPLIFY_BRANCH" == hlg ]]
 origin_pattern='^https://[a-z0-9][a-z0-9.-]+\.[a-z][a-z0-9-]+$'
 [[ "$VITE_API_BASE_URL" =~ $origin_pattern && "$UI_ORIGIN" =~ $origin_pattern && "$UI_ORIGIN" != "$VITE_API_BASE_URL" ]]
-[[ "${VITE_ENABLE_LOCAL_DIAGNOSTICS:-false}" == false ]]
 ensure_current_revision
-npm ci
-npm run build
-python3 .github/scripts/package_amplify.py dist "$VITE_API_BASE_URL" "$GITHUB_SHA" "$RELEASE_VERSION"
-(cd dist && zip -q -r ../site.zip .)
-digest="$(shasum -a 256 site.zip | cut -d ' ' -f 1)"
-record archiveSha256 "$digest"
+record archiveSha256 "$SITE_SHA256"
 record apiOrigin "$VITE_API_BASE_URL"
 record uiOrigin "$UI_ORIGIN"
-ensure_current_revision
 
 deployment=$(aws amplify create-deployment --app-id "$AMPLIFY_APP_ID" --branch-name "$AMPLIFY_BRANCH" --output json)
 job=$(jq -er '.jobId | select(test("^[0-9]+$"))' <<< "$deployment")
@@ -24,7 +17,7 @@ url=$(jq -er '.zipUploadUrl | select(startswith("https://"))' <<< "$deployment")
 record amplifyJob "$job"
 # The signed URL travels on stdin and is omitted from command arguments and logs.
 printf 'url = "%s"\n' "$url" | curl --config - --proto '=https' --fail --silent --show-error \
-    --retry 2 --max-time 180 --upload-file site.zip >/dev/null
+    --retry 2 --max-time 180 --upload-file "$SITE_ARCHIVE" >/dev/null
 ensure_current_revision
 aws amplify start-deployment --app-id "$AMPLIFY_APP_ID" --branch-name "$AMPLIFY_BRANCH" --job-id "$job" >/dev/null
 for (( attempt = 0; attempt < 90; attempt++ )); do
