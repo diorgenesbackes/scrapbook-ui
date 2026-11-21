@@ -1,4 +1,4 @@
-name: Recuperar UI em homologação
+name: Recuperar UI
 on:
   workflow_dispatch:
     inputs:
@@ -27,15 +27,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-hlg
+  group: publish-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   recover:
-    if: ${{ github.ref == 'refs/heads/hlg' }}
+    if: ${{ github.ref == 'refs/heads/hlg' || github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    environment: hlg
+    environment: ${{ github.ref_name == 'main' && 'production' || 'hlg' }}
     permissions:
       actions: read
       contents: read
@@ -63,6 +63,7 @@ jobs:
       - name: Iniciar evidência
         id: start
         run: |
+          source .github/scripts/release_support.sh
           source .github/scripts/recovery_support.sh
           start_recovery_evidence
       - name: Verificar a publicação de origem
