@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { suggestOpeningDate } from './eventDates'
+import { suggestOpeningDate, withCivilSeconds } from './eventDates'
 import { createEvent, type EventDraft, type OpeningMode } from './eventService'
+import { WelcomeMessageField } from './WelcomeMessageField'
 import cover from './default-cover.jpg'
 import './events.css'
 
@@ -12,6 +13,7 @@ type FormState =
 
 export function CreateEventPage() {
   const [name, setName] = useState('')
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null)
   const [startsAt, setStartsAt] = useState('')
   const [mode, setMode] = useState<OpeningMode>('scheduled')
   const [customDate, setCustomDate] = useState<string | null>(null)
@@ -32,8 +34,8 @@ export function CreateEventPage() {
       setState({ kind: 'invalid', fields: ['name'] })
       return null
     }
-    const civil = startsAt.length === 16 ? startsAt + ':00' : startsAt
-    const draft: EventDraft = { name, startsAt: civil, openingPolicy: { mode, opensOn: mode === 'scheduled' ? opensOn || null : null } }
+    const draft: EventDraft = { name, startsAt: withCivilSeconds(startsAt), welcomeMessage,
+      openingPolicy: { mode, opensOn: mode === 'scheduled' ? opensOn || null : null } }
     return { key: crypto.randomUUID(), draft }
   }
 
@@ -83,6 +85,7 @@ export function CreateEventPage() {
           <input id="event-start" type="datetime-local" value={startsAt} onChange={event => setStartsAt(event.target.value)} required
             aria-invalid={startInvalid} aria-describedby={startInvalid ? 'event-start-error' : undefined} />
           {startInvalid && <p id="event-start-error">Informe uma data e um horário válidos.</p>}
+          <WelcomeMessageField value={welcomeMessage} onChange={setWelcomeMessage} invalid={fields.includes('welcomeMessage')} showDefault />
           <label htmlFor="event-opening-mode">Modo de abertura</label>
           <select id="event-opening-mode" value={mode}
             onChange={event => setMode(event.target.value === 'immediate' ? 'immediate' : 'scheduled')}>
@@ -100,7 +103,6 @@ export function CreateEventPage() {
         </fieldset>
         <section aria-label="Capa e boas-vindas">
           <img className="event-cover" src={cover} alt="" width="880" height="495" />
-          <p>Seja bem-vindo! Compartilhe uma lembrança deste evento.</p>
         </section>
         {state.kind === 'invalid' && <p ref={error} tabIndex={-1} role="alert">Confira os campos destacados antes de salvar.</p>}
         {state.kind === 'expired' && <p role="alert">Sua sessão terminou. Entre novamente.</p>}
