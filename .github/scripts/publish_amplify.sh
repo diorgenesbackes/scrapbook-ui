@@ -3,9 +3,15 @@ set -euo pipefail
 source .github/scripts/release_support.sh
 
 : "${AMPLIFY_APP_ID:?}" "${AMPLIFY_BRANCH:?}" "${UI_ORIGIN:?}" "${VITE_API_BASE_URL:?}"
-[[ "$AMPLIFY_APP_ID" =~ ^[a-z0-9]+$ && "$AMPLIFY_BRANCH" == hlg ]]
+if [[ ! "$AMPLIFY_APP_ID" =~ ^[a-z0-9]+$ || "$AMPLIFY_BRANCH" != "${GITHUB_REF_NAME:-}" ]]; then
+    echo "A branch do Amplify deve corresponder à branch de publicação." >&2
+    exit 2
+fi
 origin_pattern='^https://[a-z0-9][a-z0-9.-]+\.[a-z][a-z0-9-]+$'
-[[ "$VITE_API_BASE_URL" =~ $origin_pattern && "$UI_ORIGIN" =~ $origin_pattern && "$UI_ORIGIN" != "$VITE_API_BASE_URL" ]]
+if [[ ! "$VITE_API_BASE_URL" =~ $origin_pattern || ! "$UI_ORIGIN" =~ $origin_pattern || "$UI_ORIGIN" == "$VITE_API_BASE_URL" ]]; then
+    echo "Configure origens HTTPS distintas para a UI e a API." >&2
+    exit 2
+fi
 ensure_current_revision
 record archiveSha256 "$SITE_SHA256"
 record apiOrigin "$VITE_API_BASE_URL"
