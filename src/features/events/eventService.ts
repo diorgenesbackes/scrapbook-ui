@@ -111,3 +111,30 @@ async function replaceEvent(id: string, section: 'opening-policy' | 'details', d
   const data = result.kind === 'ok' ? detail(result.payload) : null
   return data ? { kind: 'ready', data } : { kind: 'failed' }
 }
+
+export type OpeningStatus =
+  | { contentState: 'closed'; opensOn: string; opensAt: number; serverTime: number }
+  | { contentState: 'open'; serverTime: number }
+
+export type OpeningStatusResult =
+  | { kind: 'ready'; data: OpeningStatus }
+  | { kind: 'expired' | 'not-found' | 'failed' }
+
+export async function getEventOpeningStatus(id: string, signal: AbortSignal): Promise<OpeningStatusResult> {
+  const result = await getJson(eventsPath + '/' + encodeURIComponent(id) + '/opening-status', signal)
+  if (result.kind === 'http' && result.status === 401) return { kind: 'expired' }
+  if (result.kind === 'http' && result.status === 404) return { kind: 'not-found' }
+  const payload = result.kind === 'ok' ? object(result.payload) : null
+  if (!payload || typeof payload.serverTime !== 'string') return { kind: 'failed' }
+  const serverTime = Date.parse(payload.serverTime)
+  if (!Number.isFinite(serverTime)) return { kind: 'failed' }
+  if (payload.contentState === 'open') return { kind: 'ready', data: { contentState: 'open', serverTime } }
+  if (payload.contentState === 'closed' && typeof payload.opensOn === 'string'
+      && /^\d{4}-\d{2}-\d{2}$/.test(payload.opensOn) && typeof payload.opensAt === 'string') {
+    const opensAt = Date.parse(payload.opensAt)
+    if (Number.isFinite(opensAt) && opensAt >= serverTime) {
+      return { kind: 'ready', data: { contentState: 'closed', opensOn: payload.opensOn, opensAt, serverTime } }
+    }
+  }
+  return { kind: 'failed' }
+}
