@@ -42,10 +42,12 @@ jobs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       sha256: ${{ steps.package.outputs.sha256 }}
       api_origin: ${{ steps.package.outputs.api_origin }}
+      ui_origin: ${{ steps.package.outputs.ui_origin }}
     env:
       RELEASE_VERSION: ${{ needs.reserve.outputs.version }}
       RESERVED_RUN_KEY: ${{ needs.reserve.outputs.run_key }}
       VITE_API_BASE_URL: ${{ vars.API_ORIGIN }}
+      UI_ORIGIN: ${{ vars.UI_ORIGIN }}
       VITE_ENABLE_LOCAL_DIAGNOSTICS: 'false'
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -88,6 +90,7 @@ jobs:
       VITE_API_BASE_URL: ${{ vars.API_ORIGIN }}
       SITE_SHA256: ${{ needs.build.outputs.sha256 }}
       SITE_API_ORIGIN: ${{ needs.build.outputs.api_origin }}
+      SITE_UI_ORIGIN: ${{ needs.build.outputs.ui_origin }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:

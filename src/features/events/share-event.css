@@ -1,0 +1,30 @@
+.share-event { max-width: 42rem; }
+.share-event label { display: block; margin-bottom: 0.5rem; font-weight: 650; }
+.share-actions { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.5rem; margin-bottom: 1rem; }
+.share-actions input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #60665e;
+  border-radius: 0.5rem;
+  font: inherit;
+  background: #fff;
+  color: inherit;
+}
+.share-event button:disabled { background: #e3e7df; color: #42483f; cursor: default; }
+.share-print .event-qr { display: block; max-width: 100%; height: auto; margin: 1rem 0; }
+.print-link { display: none; }
+
+@media print {
+  body:has(.share-print) { background: white; color: black; }
+  body:has(.share-print) .site-header,
+  body:has(.share-print) .skip-link,
+  .share-print .share-controls,
+  .share-event > .share-controls { display: none; }
+  .share-event { margin: 0; padding: 0; width: 100%; }
+  .share-print { break-inside: avoid; }
+  .share-print h1 { font-size: 20pt; }
+  .share-print .event-qr { width: 60mm; height: 60mm; print-color-adjust: exact; }
+  .print-link { display: block; overflow-wrap: anywhere; }
+}

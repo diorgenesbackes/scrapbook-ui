@@ -34,6 +34,7 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
             <dt>Abertura das lembranças</dt><dd>{result.data.openingPolicy.opensOn ? showCivil(result.data.openingPolicy.opensOn) : 'Imediata'}</dd>
           </dl>
           <p><a href={'/meus-eventos/' + result.data.id + '/lembrancas'}>Ver lembranças</a></p>
+          <p><a href={'/meus-eventos/' + result.data.id + '/compartilhar'}>Compartilhar com convidados</a></p>
           <EventDetailsForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
             onAccessLost={kind => setResult({ kind })} />
           <EventOpeningForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
