@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { showCivil } from './eventDates'
+import { showCivil } from '../../utils/showCivil'
 import { listEvents } from './eventService'
-import cover from './default-cover.jpg'
+import cover from '../../assets/default-cover.jpg'
 import './events.css'
 
 export function EventListPage() {

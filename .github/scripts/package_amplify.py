@@ -21,11 +21,13 @@ def package(directory, api_origin, sha, version):
         "Referrer-Policy": "no-referrer",
         "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     }
-    lines = ["customHeaders:", "  - pattern: '**'", "    headers:"]
-    for key, value in headers.items():
-        lines.extend((f"      - key: {key}", f"        value: {json.dumps(value)}"))
-    lines.extend(("  - pattern: '/release.json'", "    headers:",
-                  "      - key: Cache-Control", '        value: "no-store"'))
+    guest_headers = headers | {"X-Robots-Tag": "noindex, nofollow"}
+    lines = ["customHeaders:"]
+    for pattern, values in (("**", headers), ("/e", guest_headers), ("/e/*", guest_headers),
+                            ("/release.json", headers | {"Cache-Control": "no-store"})):
+        lines.extend((f"  - pattern: '{pattern}'", "    headers:"))
+        for key, value in values.items():
+            lines.extend((f"      - key: {key}", f"        value: {json.dumps(value)}"))
     (directory / "customHttp.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (directory / "release.json").write_text(json.dumps({"sha": sha, "version": version}) + "\n", encoding="utf-8")
 
