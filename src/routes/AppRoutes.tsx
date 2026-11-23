@@ -3,6 +3,7 @@ import { CreateEventPage } from '../features/events/CreateEventPage'
 import { EventDetailsPage } from '../features/events/EventDetailsPage'
 import { EventMemoriesPage } from '../features/events/EventMemoriesPage'
 import { EventListPage } from '../features/events/EventListPage'
+import { ShareEventPage } from '../features/events/ShareEventPage'
 
 export function AppRoutes({ pathname, diagnosticsEnabled }: {
   pathname: string
@@ -11,6 +12,8 @@ export function AppRoutes({ pathname, diagnosticsEnabled }: {
   if (pathname === '/') return <HomePage diagnosticsEnabled={diagnosticsEnabled} />
   if (pathname === '/meus-eventos') return <EventListPage />
   if (pathname === '/meus-eventos/novo') return <CreateEventPage />
+  const shareEventId = /^\/meus-eventos\/([1-9][0-9]*)\/compartilhar$/.exec(pathname)?.[1]
+  if (shareEventId) return <ShareEventPage key={shareEventId} eventId={shareEventId} />
   const memoriesEventId = /^\/meus-eventos\/([1-9][0-9]*)\/lembrancas$/.exec(pathname)?.[1]
   if (memoriesEventId) return <EventMemoriesPage key={memoriesEventId} eventId={memoriesEventId} />
   const eventId = /^\/meus-eventos\/([1-9][0-9]*)$/.exec(pathname)?.[1]

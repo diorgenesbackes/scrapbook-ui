@@ -1,4 +1,5 @@
 import { getJson, postJson, putJson } from '../../lib/httpClient'
+import { isPublicEventCode } from '../../utils/publicEventUrl'
 
 const eventsPath = '/api/v1/events'
 
@@ -72,6 +73,14 @@ export async function getEvent(id: string, signal: AbortSignal): Promise<Result<
   if (result.kind === 'http' && result.status === 404) return { kind: 'not-found' }
   const data = result.kind === 'ok' ? detail(result.payload) : null
   return data ? { kind: 'ready', data } : { kind: 'failed' }
+}
+
+export async function getEventPublicLink(id: string, signal: AbortSignal): Promise<Result<string>> {
+  const result = await getJson(eventsPath + '/' + encodeURIComponent(id) + '/public-link', signal)
+  if (result.kind === 'http' && result.status === 401) return { kind: 'expired' }
+  if (result.kind === 'http' && result.status === 404) return { kind: 'not-found' }
+  const code = result.kind === 'ok' ? object(result.payload)?.code : null
+  return isPublicEventCode(code) ? { kind: 'ready', data: code } : { kind: 'failed' }
 }
 
 export async function createEvent(draft: EventDraft, key: string, signal: AbortSignal): Promise<Result<EventDetail>> {
