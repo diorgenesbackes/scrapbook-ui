@@ -9,7 +9,7 @@ ensure_current_revision
 SITE_SHA256=$(jq -er --arg ui "$UI_ORIGIN" --arg api "$VITE_API_BASE_URL" '
     select(.uiOrigin == $ui and .apiOrigin == $api) | .archiveSha256 | strings
 ' "$RECOVERY_EVIDENCE")
-export SITE_SHA256 SITE_API_ORIGIN="$VITE_API_BASE_URL" SITE_SHA="$SOURCE_SHA" SITE_VERSION="$SOURCE_VERSION"
+export SITE_SHA256 SITE_API_ORIGIN="$VITE_API_BASE_URL" SITE_UI_ORIGIN="$UI_ORIGIN" SITE_SHA="$SOURCE_SHA" SITE_VERSION="$SOURCE_VERSION"
 bash .github/scripts/verify_amplify_archive.sh
 current_job=$(aws amplify list-jobs --app-id "$AMPLIFY_APP_ID" --branch-name "$AMPLIFY_BRANCH" \
     --no-paginate --query 'jobSummaries[0].jobId' --output text)

@@ -1,10 +1,14 @@
 import cover from '../../assets/default-cover.jpg'
+import { environment } from '../../config/environment'
+import { publicEventUrl } from '../../utils/publicEventUrl'
 import { showCivil } from '../../utils/showCivil'
+import { PublicEventQr } from './PublicEventQr'
 import { usePublicEvent } from './usePublicEvent'
 import './public-event.css'
 
 export function PublicEventPage({ code }: { code: string | undefined }) {
   const { view, retry } = usePublicEvent(code)
+  const shareUrl = code && publicEventUrl(code, environment.publicSiteOrigin, window.location.origin)
 
   return (
     <main id="conteudo" tabIndex={-1} className="main guest-page" aria-busy={view.kind === 'loading'}>
@@ -55,6 +59,7 @@ export function PublicEventPage({ code }: { code: string | undefined }) {
               </div>
             )}
           </section>
+          {shareUrl && <PublicEventQr url={shareUrl} />}
         </>
       )}
     </main>
