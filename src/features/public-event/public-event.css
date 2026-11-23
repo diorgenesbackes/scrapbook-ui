@@ -30,6 +30,10 @@
 .guest-submissions h2 { margin: 0; }
 .guest-submissions p { margin: 0.5rem 0; }
 
+.guest-share { margin-top: 2rem; }
+.guest-share .event-qr { display: block; max-width: 100%; height: auto; }
+.guest-share a { overflow-wrap: anywhere; }
+
 .guest-actions {
   display: flex;
   flex-wrap: wrap;

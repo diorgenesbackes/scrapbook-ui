@@ -1,4 +1,5 @@
 export const environment = {
   apiBaseUrl: (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, ''),
+  publicSiteOrigin: import.meta.env.VITE_PUBLIC_SITE_ORIGIN ?? '',
   diagnosticsEnabled: import.meta.env.VITE_ENABLE_LOCAL_DIAGNOSTICS === 'true',
 }
