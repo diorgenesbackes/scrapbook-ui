@@ -1,0 +1,44 @@
+.guest-page {
+  width: min(100% - 2rem, 42rem);
+  padding-top: clamp(1.5rem, 5vw, 3rem);
+  overflow-wrap: anywhere;
+}
+
+.guest-page h1 {
+  max-width: none;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+}
+
+.guest-cover {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 1.5rem;
+  border-radius: 1rem;
+}
+
+.guest-welcome { white-space: pre-wrap; }
+
+.guest-submissions {
+  margin-top: 2rem;
+  padding: 1rem;
+  border: 1px solid #dadcd5;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.guest-submissions h2 { margin: 0; }
+.guest-submissions p { margin: 0.5rem 0; }
+
+.guest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.guest-page button:disabled {
+  color: #42483f;
+  background: #e3e7df;
+  cursor: default;
+}

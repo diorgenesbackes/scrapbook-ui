@@ -2,11 +2,11 @@ import { environment } from '../config/environment'
 
 type JsonResult =
   | { kind: 'ok'; payload: unknown }
-  | { kind: 'http'; status: number; payload: unknown }
+  | { kind: 'http'; status: number; payload: unknown; retryAfter: string | null }
   | { kind: 'cancelled' | 'network' | 'invalid-json' | 'empty' }
 
-export function getJson(path: string, signal: AbortSignal): Promise<JsonResult> {
-  return requestJson(path, {}, signal)
+export function getJson(path: string, signal: AbortSignal, credentials?: RequestCredentials): Promise<JsonResult> {
+  return requestJson(path, credentials ? { credentials } : {}, signal)
 }
 
 export function postJson(path: string, body: unknown, key: string, signal: AbortSignal): Promise<JsonResult> {
@@ -29,6 +29,7 @@ async function requestJson(path: string, options: {
   method?: string
   headers?: Record<string, string>
   body?: string
+  credentials?: RequestCredentials
 }, signal: AbortSignal): Promise<JsonResult> {
   let response: Response
   try {
@@ -43,12 +44,13 @@ async function requestJson(path: string, options: {
   }
 
   if (response.status === 204) return { kind: 'empty' }
+  const retryAfter = response.status === 429 ? response.headers.get('Retry-After') : null
 
   try {
     const payload: unknown = await response.json()
-    return response.ok ? { kind: 'ok', payload } : { kind: 'http', status: response.status, payload }
+    return response.ok ? { kind: 'ok', payload } : { kind: 'http', status: response.status, payload, retryAfter }
   } catch {
     if (signal.aborted) return { kind: 'cancelled' }
-    return response.ok ? { kind: 'invalid-json' } : { kind: 'http', status: response.status, payload: null }
+    return response.ok ? { kind: 'invalid-json' } : { kind: 'http', status: response.status, payload: null, retryAfter }
   }
 }
