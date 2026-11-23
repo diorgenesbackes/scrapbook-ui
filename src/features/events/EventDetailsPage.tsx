@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { showCivil } from './eventDates'
+import { showCivil } from '../../utils/showCivil'
 import { getEvent } from './eventService'
 import { EventDetailsForm } from './EventDetailsForm'
 import { EventOpeningForm } from './EventOpeningForm'
-import cover from './default-cover.jpg'
+import cover from '../../assets/default-cover.jpg'
 import './events.css'
 
 export function EventDetailsPage({ eventId }: { eventId: string }) {

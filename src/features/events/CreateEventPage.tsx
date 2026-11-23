@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { suggestOpeningDate, withCivilSeconds } from './eventDates'
 import { createEvent, type EventDraft, type OpeningMode } from './eventService'
 import { WelcomeMessageField } from './WelcomeMessageField'
-import cover from './default-cover.jpg'
+import cover from '../../assets/default-cover.jpg'
 import './events.css'
 
 type Attempt = { key: string; draft: EventDraft }

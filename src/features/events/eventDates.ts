@@ -8,12 +8,6 @@ export function suggestOpeningDate(startsAt: string): string {
   return [String(targetYear).padStart(4, '0'), match[2], day].join('-')
 }
 
-export function showCivil(value: string): string {
-  const [date, time] = value.split('T')
-  const formatted = date?.split('-').reverse().join('/') ?? ''
-  return time ? formatted + ' às ' + time.slice(0, 5) : formatted
-}
-
 export function withCivilSeconds(value: string): string {
   return value.length === 16 ? value + ':00' : value
 }

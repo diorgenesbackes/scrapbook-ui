@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { announceOpeningChange } from './eventOpeningUpdates'
-import { showCivil, suggestOpeningDate } from './eventDates'
+import { showCivil } from '../../utils/showCivil'
+import { suggestOpeningDate } from './eventDates'
 import { getEvent, replaceEventOpening, type EventDetail } from './eventService'
 
 type Status = 'idle' | 'busy' | 'saved' | 'conflict' | 'load-version' | 'locked' | 'invalid' | 'failed'
