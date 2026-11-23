@@ -1,4 +1,4 @@
-import { showCivil } from './eventDates'
+import { showCivil } from '../../utils/showCivil'
 import { useEventOpeningStatus } from './useEventOpeningStatus'
 import './events.css'
 
