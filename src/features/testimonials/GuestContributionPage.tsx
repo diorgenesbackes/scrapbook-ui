@@ -139,7 +139,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
             )}
             {step.kind === 'write' && <TextTestimonialEditor text={text} onTextChange={setText} onReview={review} />}
             {step.kind === 'photos' && (
-              <PhotoSelectionEditor selection={selection} maximum={maximum} open={open} caption={caption} onCaption={setCaption}
+              <PhotoSelectionEditor selection={selection} maximum={maximum} open={open} paused={exit !== null} caption={caption} onCaption={setCaption}
                 onReview={reviewSelectedPhotos} />
             )}
             {step.kind === 'media' && (
@@ -185,6 +185,12 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
             )}
 
             <div className="testimonial-actions">
+              {step.kind === 'photos' && open && (
+                <button className="testimonial-secondary" type="button" onClick={event => {
+                  if (dirty) setExit({ href: null, trigger: event.currentTarget })
+                  else setStep({ kind: 'choose' })
+                }}>Voltar aos formatos</button>
+              )}
               <a href={'/e/' + eventCode}>Voltar ao evento</a>
               {dirty && <button className="testimonial-secondary" type="button" onClick={event => setExit({ href: null, trigger: event.currentTarget })}>Descartar</button>}
             </div>
