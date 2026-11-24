@@ -3,7 +3,11 @@ export function isPublicEventCode(value: unknown): value is string {
 }
 
 export function publicEventUrl(code: string, configuredOrigin: string, currentOrigin: string): string | null {
-  if (!isPublicEventCode(code)) return null
+  const origin = publicSiteOrigin(configuredOrigin, currentOrigin)
+  return origin && isPublicEventCode(code) ? origin + '/e/' + code : null
+}
+
+export function publicSiteOrigin(configuredOrigin: string, currentOrigin: string): string | null {
   const origin = configuredOrigin || currentOrigin
   try {
     const source = new URL(origin)
@@ -12,7 +16,7 @@ export function publicEventUrl(code: string, configuredOrigin: string, currentOr
       ? /^https:\/\/([a-z0-9][a-z0-9-]*\.)+[a-z][a-z0-9-]*$/.test(origin)
       : (source.protocol === 'http:' || source.protocol === 'https:')
         && ['127.0.0.1', 'localhost', '[::1]'].includes(source.hostname)
-    return allowed ? origin + '/e/' + code : null
+    return allowed ? origin : null
   } catch {
     return null
   }
