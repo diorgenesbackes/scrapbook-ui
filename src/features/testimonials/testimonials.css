@@ -46,3 +46,32 @@
 
 .testimonial-dialog h2 { margin: 0 0 1rem; font-size: 1.25rem; }
 .testimonial-dialog::backdrop { background: rgb(37 40 35 / 50%); }
+
+.photo-editor { display: grid; justify-items: start; gap: 1rem; }
+.photo-editor > * { min-width: 0; }
+.photo-editor > .testimonial-editor { width: 100%; }
+.photo-picker { display: grid; gap: 0.5rem; }
+.photo-picker input { min-height: 3rem; max-width: 100%; font: inherit; }
+.photo-picker input::file-selector-button {
+  min-height: 3rem;
+  border: 1px solid #60665e;
+  border-radius: 0.5rem;
+  padding-inline: 0.75rem;
+  color: #252823;
+  background: #fff;
+  font: inherit;
+}
+
+.photo-thumbnails { display: grid; width: 100%; gap: 1rem; padding-inline-start: 1.5rem; }
+.photo-thumbnails li { padding: 0.5rem; min-width: 0; }
+.photo-thumbnails img {
+  display: block;
+  width: 100%;
+  max-height: 24rem;
+  margin-bottom: 0.5rem;
+  object-fit: contain;
+}
+
+@media (min-width: 48rem) {
+  .photo-thumbnails { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

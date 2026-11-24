@@ -1,5 +1,6 @@
-import { useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent } from 'react'
-import { countContributionCharacters, fitTestimonialPaste, testimonialTextError, testimonialTextLimit } from './testimonialText'
+import { useId, useState, type FormEvent } from 'react'
+import { testimonialTextError, testimonialTextLimit } from './testimonialText'
+import { useContributionTextInput } from './useContributionTextInput'
 
 export function TextTestimonialEditor({ text, onTextChange, onReview }: {
   text: string
@@ -7,52 +8,24 @@ export function TextTestimonialEditor({ text, onTextChange, onReview }: {
   onReview: () => boolean
 }) {
   const id = useId()
-  const input = useRef<HTMLTextAreaElement>(null)
-  const pendingCaret = useRef<number | null>(null)
-  const [feedback, setFeedback] = useState<'required' | 'limit' | null>(null)
-  const remaining = testimonialTextLimit - countContributionCharacters(text)
+  const { input, remaining, limited, change, paste } = useContributionTextInput(text, onTextChange, testimonialTextLimit)
+  const [required, setRequired] = useState(false)
+  const feedback = limited || required
   const counter = remaining <= 500
-
-  useLayoutEffect(() => {
-    const caret = pendingCaret.current
-    if (caret === null) return
-    input.current?.setSelectionRange(caret, caret)
-    pendingCaret.current = null
-  }, [text])
-
-  function change(value: string) {
-    if (countContributionCharacters(value) > testimonialTextLimit) {
-      setFeedback('limit')
-      return
-    }
-    onTextChange(value)
-    setFeedback(null)
-  }
-
-  function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const field = event.currentTarget
-    const fitted = fitTestimonialPaste(text, field.selectionStart, field.selectionEnd, event.clipboardData.getData('text/plain'))
-    if (!fitted) return
-    event.preventDefault()
-    if (fitted.value !== text) {
-      pendingCaret.current = fitted.caret
-      onTextChange(fitted.value)
-    }
-    setFeedback('limit')
-  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (onReview()) return
-    setFeedback('required')
+    setRequired(true)
     input.current?.focus()
   }
 
   return (
     <form className="testimonial-editor" method="post" noValidate onSubmit={submit}>
       <label htmlFor={id}>Seu depoimento</label>
-      <textarea id={id} ref={input} value={text} onChange={event => change(event.currentTarget.value)} onPaste={paste}
-        required aria-invalid={feedback === 'required' || undefined}
+      <textarea id={id} ref={input} value={text} onChange={event => { setRequired(false); change(event.currentTarget.value) }}
+        onPaste={event => { paste(event); if (event.defaultPrevented) setRequired(false) }}
+        required aria-invalid={required || undefined}
         aria-describedby={[counter ? id + '-count' : '', feedback ? id + '-feedback' : ''].filter(Boolean).join(' ') || undefined} />
       {counter && <p id={id + '-count'}>{remaining} caracteres restantes.</p>}
       {feedback && <p id={id + '-feedback'} role="alert" className="testimonial-error">{testimonialTextError}</p>}
