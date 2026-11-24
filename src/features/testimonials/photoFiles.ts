@@ -1,8 +1,7 @@
-import type { ContributionCategory } from './guestContribution'
+import { mediaCaptionLimit, type ContributionCategory } from './guestContribution'
 import { countContributionCharacters } from './testimonialText'
 
 export const photoSizeLimit = 20_000_000
-export const photoCaptionLimit = 500
 export const photoAccept = 'image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif'
 
 export type PhotoFormat = 'jpeg' | 'png' | 'heic' | 'heif'
@@ -83,7 +82,7 @@ export async function readPhoto(file: File): Promise<PhotoFormat | PhotoIssue> {
 export function reviewPhotos(eventCode: string, category: ContributionCategory, photos: readonly SelectedPhoto[], caption: string | null): ReviewedPhotos | null {
   if (photos.length === 0 || photos.length > photoCountLimit(category)
       || photos.some(photo => validatePhotoSize(photo.sizeBytes))
-      || (caption !== null && countContributionCharacters(caption) > photoCaptionLimit)) return null
+      || (caption !== null && countContributionCharacters(caption) > mediaCaptionLimit)) return null
   return {
     eventCode,
     category,

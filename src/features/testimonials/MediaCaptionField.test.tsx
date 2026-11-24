@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { PhotoCaptionField } from './PhotoCaptionField'
+import { MediaCaptionField } from './MediaCaptionField'
 
 afterEach(cleanup)
 
@@ -9,7 +9,7 @@ it('conta escalares Unicode e mantém o sufixo ao limitar a colagem da legenda',
   const remove = vi.fn()
   function Caption() {
     const [value, setValue] = useState('')
-    return <PhotoCaptionField caption={value} onChange={setValue} onRemove={remove} />
+    return <MediaCaptionField label="Legenda das fotos" caption={value} onChange={setValue} onRemove={remove} />
   }
 
   render(<Caption />)

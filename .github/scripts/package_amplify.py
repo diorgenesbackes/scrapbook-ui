@@ -10,7 +10,7 @@ def package(directory, api_origin, sha, version):
     if not (directory / "index.html").is_file():
         raise ValueError("Execute o build antes de preparar o artefato.")
     csp = (
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
         f"connect-src 'self' {api_origin}; object-src 'none'; base-uri 'self'; "
         "frame-ancestors 'none'; form-action 'self'"
     )
