@@ -19,7 +19,7 @@ def package(directory, api_origin, sha, version):
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
     }
     guest_headers = headers | {"X-Robots-Tag": "noindex, nofollow"}
     lines = ["customHeaders:"]
