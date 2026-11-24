@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { QrCode } from '../../components/QrCode'
 import { environment } from '../../config/environment'
 import { useQrCode } from '../../hooks/useQrCode'
+import { useLinkClipboard } from '../../hooks/useLinkClipboard'
 import { downloadQrCode, qrPng, qrSvg } from '../../lib/qrCodeFiles'
 import { publicEventUrl } from '../../utils/publicEventUrl'
 import { getEvent, getEventPublicLink } from './eventService'
@@ -12,20 +13,8 @@ type ShareEventView = { kind: 'loading' | 'expired' | 'not-found' | 'failed' | '
 
 function ShareEventCard({ name, url }: { name: string; url: string }) {
   const qr = useQrCode(url)
-  const urlField = useRef<HTMLInputElement>(null)
-  const [feedback, setFeedback] = useState('')
+  const clipboard = useLinkClipboard(url)
   const [failed, setFailed] = useState(false)
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(url)
-      setFeedback('Link copiado.')
-    } catch {
-      urlField.current?.focus()
-      urlField.current?.select()
-      setFeedback('Copie o endereço selecionado para compartilhá-lo.')
-    }
-  }
 
   async function download(extension: 'png' | 'svg') {
     if (qr.kind !== 'ready') return
@@ -44,10 +33,10 @@ function ShareEventCard({ name, url }: { name: string; url: string }) {
       <div className="share-controls">
         <label htmlFor="public-event-url">Link dos convidados</label>
         <div className="share-actions">
-          <input id="public-event-url" type="text" inputMode="url" value={url} readOnly ref={urlField} spellCheck={false} />
-          <button type="button" onClick={() => void copyLink()}>Copiar link</button>
+          <input id="public-event-url" type="text" inputMode="url" value={url} readOnly ref={clipboard.field} spellCheck={false} />
+          <button type="button" onClick={() => void clipboard.copy()}>Copiar link</button>
         </div>
-        <p role="status">{feedback}</p>
+        <p role="status">{clipboard.feedback}</p>
       </div>
       {qr.kind === 'ready' && <QrCode matrix={qr.matrix} />}
       <p className="print-link">{url}</p>

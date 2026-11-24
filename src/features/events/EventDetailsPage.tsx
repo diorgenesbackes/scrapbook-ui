@@ -35,6 +35,7 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
           </dl>
           <p><a href={'/meus-eventos/' + result.data.id + '/lembrancas'}>Ver lembranças</a></p>
           <p><a href={'/meus-eventos/' + result.data.id + '/compartilhar'}>Compartilhar com convidados</a></p>
+          <p><a href={'/meus-eventos/' + result.data.id + '/convidar'}>Convidar responsável</a></p>
           <EventDetailsForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
             onAccessLost={kind => setResult({ kind })} />
           <EventOpeningForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}

@@ -1,0 +1,16 @@
+.invitation-page { max-width: 42rem; }
+.invitation-page label { display: block; margin-bottom: 0.5rem; font-weight: 650; }
+.invitation-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.invitation-controls input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #60665e;
+  border-radius: 0.5rem;
+  font: inherit;
+  background: #fff;
+  color: inherit;
+}
+.invitation-page .event-qr { display: block; max-width: 100%; height: auto; margin: 1rem 0; }
+.invitation-confirm { display: flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; margin: 1rem 0; }

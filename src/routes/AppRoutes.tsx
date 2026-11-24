@@ -4,6 +4,9 @@ import { EventDetailsPage } from '../features/events/EventDetailsPage'
 import { EventMemoriesPage } from '../features/events/EventMemoriesPage'
 import { EventListPage } from '../features/events/EventListPage'
 import { ShareEventPage } from '../features/events/ShareEventPage'
+import { EventInvitationPage } from '../features/events/EventInvitationPage'
+import { InvitationEntryPage } from '../features/events/InvitationEntryPage'
+import { invitationEntryPath } from '../utils/invitationUrl'
 
 export function AppRoutes({ pathname, diagnosticsEnabled }: {
   pathname: string
@@ -12,6 +15,9 @@ export function AppRoutes({ pathname, diagnosticsEnabled }: {
   if (pathname === '/') return <HomePage diagnosticsEnabled={diagnosticsEnabled} />
   if (pathname === '/meus-eventos') return <EventListPage />
   if (pathname === '/meus-eventos/novo') return <CreateEventPage />
+  if (pathname === invitationEntryPath) return <InvitationEntryPage />
+  const invitationEventId = /^\/meus-eventos\/([1-9][0-9]*)\/convidar$/.exec(pathname)?.[1]
+  if (invitationEventId) return <EventInvitationPage key={invitationEventId} eventId={invitationEventId} />
   const shareEventId = /^\/meus-eventos\/([1-9][0-9]*)\/compartilhar$/.exec(pathname)?.[1]
   if (shareEventId) return <ShareEventPage key={shareEventId} eventId={shareEventId} />
   const memoriesEventId = /^\/meus-eventos\/([1-9][0-9]*)\/lembrancas$/.exec(pathname)?.[1]
