@@ -56,10 +56,10 @@ export function PublicEventPage({ code, renderEvent }: {
               )}
               {view.state === 'closed' && <p>O prazo para novos envios terminou.</p>}
             </div>}
-            {view.state === 'open' && (
+            {view.state === 'open' && code && (
               <div className="guest-actions">
-                {code && <a className="guest-action-link" href={'/e/' + code + '/depoimento'}>Deixe um depoimento</a>}
-                <button type="button" disabled>Registre um momento</button>
+                <a className="guest-action-link" href={'/e/' + code + '/depoimento'}>Deixe um depoimento</a>
+                <a className="guest-action-link" href={'/e/' + code + '/momento'}>Registre um momento</a>
               </div>
             )}
           </section>

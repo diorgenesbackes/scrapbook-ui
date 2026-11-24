@@ -1,34 +1,43 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { GuestAccessNotice } from '../guest-identification/GuestIdentificationForm'
+import type { GuestAccessNotice, GuestIdentification } from '../guest-identification/GuestIdentificationForm'
 import { GuestIdentificationStep } from '../guest-identification/GuestIdentificationStep'
 import { PublicEventPage } from '../public-event/PublicEventPage'
 import { DraftDiscardDialog } from './DraftDiscardDialog'
+import { identifyContribution, type ContributionCategory } from './guestContribution'
+import { photoCountLimit, reviewPhotos, type ReviewedPhotos } from './photoFiles'
+import { PhotoSelectionEditor, PhotoThumbnails } from './PhotoSelectionEditor'
 import { TextTestimonialEditor } from './TextTestimonialEditor'
-import { identifyTextTestimonial, reviewTextTestimonial, type IdentifiedTextTestimonial, type ReviewedTextTestimonial } from './testimonialText'
+import { reviewTextTestimonial, type ReviewedTextTestimonial } from './testimonialText'
+import { usePhotoSelection } from './usePhotoSelection'
 import './testimonials.css'
 
+type ReviewedContribution = ReviewedTextTestimonial | ReviewedPhotos
+
 type Step =
-  | { kind: 'choose' | 'write' }
-  | { kind: 'review' | 'identify'; contribution: ReviewedTextTestimonial }
-  | { kind: 'identified'; contribution: IdentifiedTextTestimonial; remembered: boolean }
+  | { kind: 'choose' | 'write' | 'photos' }
+  | { kind: 'review' | 'identify'; contribution: ReviewedContribution }
+  | { kind: 'identified'; contribution: ReviewedContribution & { identification: GuestIdentification }; remembered: boolean }
 
 type PendingExit = { href: string | null; trigger: HTMLElement | null }
 
-const titles = {
-  choose: 'Deixe um depoimento',
-  write: 'Escrever depoimento',
-  review: 'Revisar depoimento',
-  identify: 'Identificação',
-  identified: 'Revisar depoimento',
+function title(step: Step, open: boolean, category: ContributionCategory): string {
+  if (step.kind === 'choose') return category === 'testimonial' ? 'Deixe um depoimento' : 'Registre um momento'
+  if (step.kind === 'write') return 'Escrever depoimento'
+  if (step.kind === 'photos') return 'Selecionar fotos'
+  if (step.kind === 'identify' && open) return 'Identificação'
+  return category === 'testimonial' ? 'Revisar depoimento' : 'Revisar momento'
 }
 
-export function TextTestimonialPage({ eventCode, notice }: { eventCode: string; notice?: GuestAccessNotice }) {
+export function GuestContributionPage({ eventCode, category, notice }: { eventCode: string; category: ContributionCategory; notice?: GuestAccessNotice }) {
   const [text, setText] = useState('')
+  const [caption, setCaption] = useState<string | null>(null)
   const [step, setStep] = useState<Step>({ kind: 'choose' })
   const [exit, setExit] = useState<PendingExit | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const confirmedExit = useRef(false)
-  const dirty = text.length > 0
+  const maximum = photoCountLimit(category)
+  const selection = usePhotoSelection(maximum)
+  const dirty = text.length > 0 || (caption?.length ?? 0) > 0 || selection.photos.length > 0 || selection.busy
 
   useLayoutEffect(() => {
     heading.current?.focus()
@@ -69,10 +78,18 @@ export function TextTestimonialPage({ eventCode, notice }: { eventCode: string; 
     return true
   }
 
+  function reviewSelectedPhotos() {
+    if (selection.busy || selection.rejected.length) return
+    const contribution = reviewPhotos(eventCode, category, selection.photos, caption)
+    if (contribution) setStep({ kind: 'review', contribution })
+  }
+
   function discard() {
     const href = exit?.href
     setExit(null)
     setText('')
+    setCaption(null)
+    selection.clear()
     setStep({ kind: 'choose' })
     if (href) {
       confirmedExit.current = true
@@ -90,26 +107,46 @@ export function TextTestimonialPage({ eventCode, notice }: { eventCode: string; 
         return (
           <section className="testimonial">
             <p className="testimonial-event">{event.name}</p>
-            <h1 ref={heading} tabIndex={-1}>{!open && step.kind === 'identify' ? titles.review : titles[step.kind]}</h1>
+            <h1 ref={heading} tabIndex={-1}>{title(step, open, category)}</h1>
             {!open && <p role="status">{state === 'closed' ? 'O prazo para novos envios terminou.' : 'Novos envios ainda não estão disponíveis.'}</p>}
 
-            {step.kind === 'choose' && open && <button type="button" onClick={() => setStep({ kind: 'write' })}>Escrever depoimento</button>}
+            {step.kind === 'choose' && open && (
+              <div className="testimonial-actions">
+                {category === 'testimonial' && <button type="button" onClick={() => setStep({ kind: 'write' })}>Escrever depoimento</button>}
+                <button type="button" onClick={() => setStep({ kind: 'photos' })}>Selecionar fotos</button>
+              </div>
+            )}
             {step.kind === 'write' && <TextTestimonialEditor text={text} onTextChange={setText} onReview={review} />}
+            {step.kind === 'photos' && (
+              <PhotoSelectionEditor selection={selection} maximum={maximum} open={open} caption={caption} onCaption={setCaption}
+                onReview={reviewSelectedPhotos} />
+            )}
 
             {identifying && step.kind === 'identify' ? (
               <>
                 <GuestIdentificationStep eventCode={eventCode} notice={notice} onConfirm={({ identification, remembered }) => {
-                  const contribution = identifyTextTestimonial(step.contribution, identification)
+                  const contribution = identifyContribution(step.contribution, identification)
                   if (contribution) setStep({ kind: 'identified', contribution, remembered })
                 }} />
                 <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'review', contribution: step.contribution })}>Voltar à revisão</button>
               </>
             ) : 'contribution' in step && (
               <>
-                <section className="testimonial-preview" aria-label="Prévia do depoimento"><p>{step.contribution.text}</p></section>
+                {step.contribution.format === 'text' ? (
+                  <section className="testimonial-preview" aria-label="Prévia do depoimento"><p>{step.contribution.text}</p></section>
+                ) : (
+                  <section className="testimonial-preview" aria-label="Prévia das fotos">
+                    <PhotoThumbnails photos={selection.photos} />
+                    {step.contribution.caption && <p>{step.contribution.caption}</p>}
+                  </section>
+                )}
                 {step.kind === 'identified' && <p role="status">Identificação confirmada.{!step.remembered && ' Nome e concordância estão disponíveis apenas nesta página.'}</p>}
                 <div className="testimonial-actions">
-                  <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'write' })}>Editar texto</button>
+                  {step.contribution.format === 'text' ? (
+                    <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'write' })}>Editar texto</button>
+                  ) : (
+                    <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'photos' })}>Editar fotos e legenda</button>
+                  )}
                   {open && notice && step.kind === 'review' && (
                     <button type="button" onClick={() => setStep({ kind: 'identify', contribution: step.contribution })}>Confirmar identificação</button>
                   )}
