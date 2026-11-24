@@ -30,6 +30,7 @@ afterEach(() => {
   vi.resetAllMocks()
   vi.restoreAllMocks()
   vi.useRealTimers()
+  vi.unstubAllEnvs()
 })
 
 it('informa o horário de abertura sem oferecer ações antecipadas', async () => {
@@ -117,4 +118,37 @@ it('respeita o tempo informado na limitação antes de oferecer nova consulta', 
   fireEvent.click(retry)
   await advance(0)
   expect(screen.getByRole('heading', { name: 'Festa no jardim' })).toBeTruthy()
+})
+
+it('reserva a S17 ao diagnóstico local e à janela aberta', async () => {
+  vi.stubEnv('VITE_ENABLE_LOCAL_DIAGNOSTICS', 'false')
+  const preview = path + '/identificacao'
+  const get = vi.mocked(getPublicEvent)
+  const app = render(<GuestEventRoute pathname={preview} />)
+  screen.getByRole('heading', { name: 'Evento indisponível.' })
+  expect(get).not.toHaveBeenCalled()
+
+  vi.stubEnv('VITE_ENABLE_LOCAL_DIAGNOSTICS', 'true')
+  get.mockResolvedValue(result('closed'))
+  app.rerender(<GuestEventRoute pathname={preview} />)
+  await screen.findByText('O prazo para novos envios terminou.')
+  expect(screen.queryByRole('heading', { name: 'Identificação' })).toBeNull()
+})
+
+it('deriva a identificação do código verificado e reinicia o formulário ao trocar de evento', async () => {
+  vi.stubEnv('VITE_ENABLE_LOCAL_DIAGNOSTICS', 'true')
+  const get = vi.mocked(getPublicEvent)
+  get.mockResolvedValueOnce(result('open', 90_000)).mockResolvedValueOnce(result('open', 90_000, 'Segundo evento'))
+  const app = render(<GuestEventRoute pathname={path + '/identificacao'} />)
+  const name = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Nome ou apelido' })
+  fireEvent.change(name, { target: { value: 'Ana' } })
+  fireEvent.click(screen.getByRole('checkbox'))
+  expect(get.mock.calls[0]?.[0]).toBe(code)
+
+  const otherCode = 'B'.repeat(43)
+  app.rerender(<GuestEventRoute pathname={'/e/' + otherCode + '/identificacao'} />)
+  await screen.findByText('Segundo evento')
+  expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Nome ou apelido' }).value).toBe('')
+  expect(screen.getByRole<HTMLInputElement>('checkbox').checked).toBe(false)
+  expect(get.mock.calls[1]?.[0]).toBe(otherCode)
 })

@@ -1,14 +1,20 @@
+import type { ReactNode } from 'react'
 import cover from '../../assets/default-cover.jpg'
 import { environment } from '../../config/environment'
 import { publicEventUrl } from '../../utils/publicEventUrl'
 import { showCivil } from '../../utils/showCivil'
 import { PublicEventQr } from './PublicEventQr'
+import type { PublicEvent } from './publicEventService'
 import { usePublicEvent } from './usePublicEvent'
 import './public-event.css'
 
-export function PublicEventPage({ code }: { code: string | undefined }) {
+export function PublicEventPage({ code, renderOpenEvent }: {
+  code: string | undefined
+  renderOpenEvent?: (event: PublicEvent) => ReactNode
+}) {
   const { view, retry } = usePublicEvent(code)
   const shareUrl = code && publicEventUrl(code, environment.publicSiteOrigin, window.location.origin)
+  const showOpenEvent = view.kind === 'ready' && view.state === 'open' && renderOpenEvent
 
   return (
     <main id="conteudo" tabIndex={-1} className="main guest-page" aria-busy={view.kind === 'loading'}>
@@ -32,7 +38,7 @@ export function PublicEventPage({ code }: { code: string | undefined }) {
           <button type="button" onClick={retry} disabled={!view.canRetry}>Tentar novamente</button>
         </>
       )}
-      {view.kind === 'ready' && (
+      {view.kind === 'ready' && (showOpenEvent ? showOpenEvent(view.event) : (
         <>
           <img className="guest-cover" src={cover} alt="" width={880} height={495} />
           <h1>{view.event.name}</h1>
@@ -61,7 +67,7 @@ export function PublicEventPage({ code }: { code: string | undefined }) {
           </section>
           {shareUrl && <PublicEventQr url={shareUrl} />}
         </>
-      )}
+      ))}
     </main>
   )
 }

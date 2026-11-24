@@ -1,0 +1,46 @@
+.guest-identification {
+  display: grid;
+  gap: 1.25rem;
+  margin-block: 1.25rem;
+}
+
+.guest-identification p {
+  margin-block: 0.5rem;
+}
+
+.guest-identification input[type='text'] {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  margin-top: 0.25rem;
+  border: 1px solid #60665e;
+  border-radius: 0.5rem;
+  padding: 0.55rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.guest-identification-consent {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.guest-identification-consent input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: #242822;
+}
+
+.guest-identification-error {
+  color: #941b16;
+}
+
+.guest-identification button {
+  justify-self: start;
+}
