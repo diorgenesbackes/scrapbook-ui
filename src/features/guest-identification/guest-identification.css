@@ -44,3 +44,25 @@
 .guest-identification button {
   justify-self: start;
 }
+
+.guest-identification-returning button + button {
+  margin-inline-start: 0.5rem;
+}
+
+.guest-identification-returning .guest-edit-name {
+  border: 1px solid #60665e;
+  background: #fff;
+  color: #252823;
+}
+
+.guest-identification-draft label,
+.guest-identification-draft textarea {
+  display: block;
+}
+
+.guest-identification-draft textarea {
+  width: 100%;
+  min-height: 5rem;
+  margin-top: 0.25rem;
+  font: inherit;
+}

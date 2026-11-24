@@ -10,20 +10,26 @@ export type GuestIdentification = Readonly<{
   acceptedAt: string
 }>
 
-export function GuestIdentificationForm({ eventCode, notice, onConfirm }: {
+export function GuestIdentificationForm({ eventCode, notice, onConfirm, initialName = '', focusName = false }: {
   eventCode: string
   notice: GuestAccessNotice
   onConfirm: (identification: GuestIdentification) => void
+  initialName?: string
+  focusName?: boolean
 }) {
   const id = useId()
   const nameInput = useRef<HTMLInputElement>(null)
   const noticeInput = useRef<HTMLInputElement>(null)
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName)
   const [accepted, setAccepted] = useState(false)
   const [invalid, setInvalid] = useState<{ name: boolean; notice: boolean } | null>(null)
   const guestName = name.trim()
   const nameError = invalid?.name && !guestName
   const noticeError = invalid?.notice && !accepted
+
+  useLayoutEffect(() => {
+    if (focusName) nameInput.current?.focus()
+  }, [focusName])
 
   useLayoutEffect(() => {
     if (invalid?.name) nameInput.current?.focus()
