@@ -62,7 +62,7 @@ it('aguarda confirmação para abrir o depoimento e retira o ingresso no fechame
   expect(screen.queryByRole('link', { name: 'Deixe um depoimento' })).toBeNull()
   await act(async () => confirm(result('open', 5_000)))
   expect(screen.getByRole('link', { name: 'Deixe um depoimento' }).getAttribute('href')).toBe(path + '/depoimento')
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Registre um momento' }).disabled).toBe(true)
+  expect(screen.getByRole('link', { name: 'Registre um momento' }).getAttribute('href')).toBe(path + '/momento')
   await advance(5_000)
   expect(screen.getByRole('status').textContent).toContain('O prazo para novos envios terminou.')
   expect(screen.queryByRole('button')).toBeNull()
