@@ -4,17 +4,21 @@ import { GuestIdentificationStep } from '../guest-identification/GuestIdentifica
 import { PublicEventPage } from '../public-event/PublicEventPage'
 import { DraftDiscardDialog } from './DraftDiscardDialog'
 import { identifyContribution, type ContributionCategory } from './guestContribution'
+import { ContributionMediaPreview, MediaFileEditor } from './MediaFileEditor'
+import { reviewMedia, type MediaKind, type ReviewedMedia } from './mediaFiles'
 import { photoCountLimit, reviewPhotos, type ReviewedPhotos } from './photoFiles'
 import { PhotoSelectionEditor, PhotoThumbnails } from './PhotoSelectionEditor'
 import { TextTestimonialEditor } from './TextTestimonialEditor'
 import { reviewTextTestimonial, type ReviewedTextTestimonial } from './testimonialText'
 import { usePhotoSelection } from './usePhotoSelection'
+import { useMediaSelection } from './useMediaSelection'
 import './testimonials.css'
 
-type ReviewedContribution = ReviewedTextTestimonial | ReviewedPhotos
+type ReviewedContribution = ReviewedTextTestimonial | ReviewedPhotos | ReviewedMedia
 
 type Step =
   | { kind: 'choose' | 'write' | 'photos' }
+  | { kind: 'media'; media: MediaKind }
   | { kind: 'review' | 'identify'; contribution: ReviewedContribution }
   | { kind: 'identified'; contribution: ReviewedContribution & { identification: GuestIdentification }; remembered: boolean }
 
@@ -24,6 +28,7 @@ function title(step: Step, open: boolean, category: ContributionCategory): strin
   if (step.kind === 'choose') return category === 'testimonial' ? 'Deixe um depoimento' : 'Registre um momento'
   if (step.kind === 'write') return 'Escrever depoimento'
   if (step.kind === 'photos') return 'Selecionar fotos'
+  if (step.kind === 'media') return step.media === 'video' ? 'Selecionar vídeo' : 'Selecionar áudio'
   if (step.kind === 'identify' && open) return 'Identificação'
   return category === 'testimonial' ? 'Revisar depoimento' : 'Revisar momento'
 }
@@ -37,7 +42,8 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
   const confirmedExit = useRef(false)
   const maximum = photoCountLimit(category)
   const selection = usePhotoSelection(maximum)
-  const dirty = text.length > 0 || (caption?.length ?? 0) > 0 || selection.photos.length > 0 || selection.busy
+  const media = useMediaSelection(category)
+  const dirty = text.length > 0 || (caption?.length ?? 0) > 0 || selection.photos.length > 0 || selection.busy || !!media.selected || media.busy
 
   useLayoutEffect(() => {
     heading.current?.focus()
@@ -84,12 +90,25 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     if (contribution) setStep({ kind: 'review', contribution })
   }
 
+  function reviewSelectedMedia() {
+    if (!media.selected || media.issue || media.busy || media.previewFailed) return
+    const contribution = reviewMedia(eventCode, category, media.selected, caption)
+    if (contribution) setStep({ kind: 'review', contribution })
+  }
+
+  function edit(format: ReviewedContribution['format']) {
+    if (format === 'text') setStep({ kind: 'write' })
+    else if (format === 'photo') setStep({ kind: 'photos' })
+    else setStep({ kind: 'media', media: format })
+  }
+
   function discard() {
     const href = exit?.href
     setExit(null)
     setText('')
     setCaption(null)
     selection.clear()
+    media.clear()
     setStep({ kind: 'choose' })
     if (href) {
       confirmedExit.current = true
@@ -114,12 +133,18 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
               <div className="testimonial-actions">
                 {category === 'testimonial' && <button type="button" onClick={() => setStep({ kind: 'write' })}>Escrever depoimento</button>}
                 <button type="button" onClick={() => setStep({ kind: 'photos' })}>Selecionar fotos</button>
+                <button type="button" onClick={() => setStep({ kind: 'media', media: 'video' })}>Selecionar vídeo</button>
+                {category === 'testimonial' && <button type="button" onClick={() => setStep({ kind: 'media', media: 'audio' })}>Selecionar áudio</button>}
               </div>
             )}
             {step.kind === 'write' && <TextTestimonialEditor text={text} onTextChange={setText} onReview={review} />}
             {step.kind === 'photos' && (
               <PhotoSelectionEditor selection={selection} maximum={maximum} open={open} caption={caption} onCaption={setCaption}
                 onReview={reviewSelectedPhotos} />
+            )}
+            {step.kind === 'media' && (
+              <MediaFileEditor category={category} kind={step.media} selection={media} open={open} caption={caption} onCaption={setCaption}
+                onReview={reviewSelectedMedia} />
             )}
 
             {identifying && step.kind === 'identify' ? (
@@ -134,20 +159,24 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
               <>
                 {step.contribution.format === 'text' ? (
                   <section className="testimonial-preview" aria-label="Prévia do depoimento"><p>{step.contribution.text}</p></section>
-                ) : (
+                ) : step.contribution.format === 'photo' ? (
                   <section className="testimonial-preview" aria-label="Prévia das fotos">
                     <PhotoThumbnails photos={selection.photos} />
+                    {step.contribution.caption && <p>{step.contribution.caption}</p>}
+                  </section>
+                ) : media.selected && (
+                  <section className="testimonial-preview" aria-label="Prévia da mídia">
+                    <ContributionMediaPreview media={media.selected} failed={media.previewFailed} onFailure={() => media.setPreviewFailed(true)}
+                      onRetry={() => media.setPreviewFailed(false)} />
                     {step.contribution.caption && <p>{step.contribution.caption}</p>}
                   </section>
                 )}
                 {step.kind === 'identified' && <p role="status">Identificação confirmada.{!step.remembered && ' Nome e concordância estão disponíveis apenas nesta página.'}</p>}
                 <div className="testimonial-actions">
-                  {step.contribution.format === 'text' ? (
-                    <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'write' })}>Editar texto</button>
-                  ) : (
-                    <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'photos' })}>Editar fotos e legenda</button>
-                  )}
-                  {open && notice && step.kind === 'review' && (
+                  <button className="testimonial-secondary" type="button" onClick={() => edit(step.contribution.format)}>
+                    {{ text: 'Editar texto', photo: 'Editar fotos e legenda', video: 'Editar vídeo e legenda', audio: 'Editar áudio e legenda' }[step.contribution.format]}
+                  </button>
+                  {open && notice && step.kind === 'review' && !media.previewFailed && (
                     <button type="button" onClick={() => setStep({ kind: 'identify', contribution: step.contribution })}>Confirmar identificação</button>
                   )}
                   <button type="button" disabled>Enviar</button>
