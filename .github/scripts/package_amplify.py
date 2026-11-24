@@ -24,6 +24,7 @@ def package(directory, api_origin, sha, version):
     guest_headers = headers | {"X-Robots-Tag": "noindex, nofollow"}
     lines = ["customHeaders:"]
     for pattern, values in (("**", headers), ("/e", guest_headers), ("/e/*", guest_headers),
+                            ("/convites/aceitar", guest_headers),
                             ("/release.json", headers | {"Cache-Control": "no-store"})):
         lines.extend((f"  - pattern: '{pattern}'", "    headers:"))
         for key, value in values.items():
