@@ -4,17 +4,16 @@ import { environment } from '../../config/environment'
 import { publicEventUrl } from '../../utils/publicEventUrl'
 import { showCivil } from '../../utils/showCivil'
 import { PublicEventQr } from './PublicEventQr'
-import type { PublicEvent } from './publicEventService'
+import type { PublicEvent, SubmissionState } from './publicEventService'
 import { usePublicEvent } from './usePublicEvent'
 import './public-event.css'
 
-export function PublicEventPage({ code, renderOpenEvent }: {
+export function PublicEventPage({ code, renderEvent }: {
   code: string | undefined
-  renderOpenEvent?: (event: PublicEvent) => ReactNode
+  renderEvent?: (event: PublicEvent, state: SubmissionState) => ReactNode
 }) {
   const { view, retry } = usePublicEvent(code)
   const shareUrl = code && publicEventUrl(code, environment.publicSiteOrigin, window.location.origin)
-  const showOpenEvent = view.kind === 'ready' && view.state === 'open' && renderOpenEvent
 
   return (
     <main id="conteudo" tabIndex={-1} className="main guest-page" aria-busy={view.kind === 'loading'}>
@@ -38,7 +37,7 @@ export function PublicEventPage({ code, renderOpenEvent }: {
           <button type="button" onClick={retry} disabled={!view.canRetry}>Tentar novamente</button>
         </>
       )}
-      {view.kind === 'ready' && (showOpenEvent ? showOpenEvent(view.event) : (
+      {view.kind === 'ready' && (renderEvent?.(view.event, view.state) ?? (
         <>
           <img className="guest-cover" src={cover} alt="" width={880} height={495} />
           <h1>{view.event.name}</h1>
@@ -46,7 +45,7 @@ export function PublicEventPage({ code, renderOpenEvent }: {
           <p className="guest-welcome">{view.event.welcomeMessage}</p>
           <section className="guest-submissions" aria-labelledby="guest-submissions-heading">
             <h2 id="guest-submissions-heading">Envios</h2>
-            <div role="status">
+            {view.state !== 'open' && <div role="status">
               {view.state === 'before' && (
                 <>
                   <p>Novos envios ainda não estão disponíveis.</p>
@@ -55,12 +54,11 @@ export function PublicEventPage({ code, renderOpenEvent }: {
                   </time> (horário de Brasília).</p>
                 </>
               )}
-              {view.state === 'open' && <p>A participação estará disponível em breve.</p>}
               {view.state === 'closed' && <p>O prazo para novos envios terminou.</p>}
-            </div>
+            </div>}
             {view.state === 'open' && (
               <div className="guest-actions">
-                <button type="button" disabled>Deixe um depoimento</button>
+                {code && <a className="guest-action-link" href={'/e/' + code + '/depoimento'}>Deixe um depoimento</a>}
                 <button type="button" disabled>Registre um momento</button>
               </div>
             )}

@@ -46,3 +46,17 @@
   background: #e3e7df;
   cursor: default;
 }
+
+.guest-action-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  background: #252823;
+  color: #fff;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.guest-action-link:hover { background: #3b4239; }

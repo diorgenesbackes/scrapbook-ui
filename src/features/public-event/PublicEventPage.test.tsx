@@ -4,6 +4,14 @@ import { GuestEventRoute } from '../../routes/GuestEventRoute'
 import { getPublicEvent, type PublicEventResult, type SubmissionState } from './publicEventService'
 
 vi.mock('./publicEventService', () => ({ getPublicEvent: vi.fn() }))
+vi.mock('../testimonials/DraftDiscardDialog', () => ({
+  DraftDiscardDialog: ({ onStay, onDiscard }: { onStay: () => void; onDiscard: () => void }) => (
+    <div role="dialog" aria-label="Descarte">
+      <button type="button" onClick={onStay}>Permanecer</button>
+      <button type="button" onClick={onDiscard}>Descartar rascunho</button>
+    </div>
+  ),
+}))
 
 const code = '_lv5Uj97Qkq7kckeOtjXoY3jHviZqegNrKxNPEp8yXQ'
 const path = '/e/' + code
@@ -41,7 +49,7 @@ it('informa o horário de abertura sem oferecer ações antecipadas', async () =
   expect(screen.queryByRole('button')).toBeNull()
 })
 
-it('aguarda confirmação para exibir os botões provisórios e os retira no fechamento', async () => {
+it('aguarda confirmação para abrir o depoimento e retira o ingresso no fechamento', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
   vi.spyOn(Math, 'random').mockReturnValue(0.5)
   const get = vi.mocked(getPublicEvent)
@@ -51,10 +59,10 @@ it('aguarda confirmação para exibir os botões provisórios e os retira no fec
   render(<GuestEventRoute pathname={path} />)
   await advance(3_000)
   expect(get).toHaveBeenCalledTimes(2)
-  expect(screen.queryByRole('button', { name: 'Deixe um depoimento' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Deixe um depoimento' })).toBeNull()
   await act(async () => confirm(result('open', 5_000)))
-  expect(screen.getByRole('status').textContent).toContain('A participação estará disponível em breve.')
-  expect(screen.getAllByRole<HTMLButtonElement>('button').every(button => button.disabled)).toBe(true)
+  expect(screen.getByRole('link', { name: 'Deixe um depoimento' }).getAttribute('href')).toBe(path + '/depoimento')
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Registre um momento' }).disabled).toBe(true)
   await advance(5_000)
   expect(screen.getByRole('status').textContent).toContain('O prazo para novos envios terminou.')
   expect(screen.queryByRole('button')).toBeNull()
@@ -88,9 +96,9 @@ it('encerra as ações enquanto uma reconsulta periódica ainda está pendente',
 
   await advance(300_000)
   expect(get).toHaveBeenCalledTimes(2)
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deixe um depoimento' }).disabled).toBe(true)
+  expect(screen.getByRole('link', { name: 'Deixe um depoimento' }).getAttribute('href')).toBe(path + '/depoimento')
   await advance(100)
-  expect(screen.queryByRole('button', { name: 'Deixe um depoimento' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Deixe um depoimento' })).toBeNull()
   expect(screen.getByRole('status').textContent).toContain('O prazo para novos envios terminou.')
 })
 
@@ -148,7 +156,42 @@ it('deriva a identificação do código verificado e reinicia o formulário ao t
   const otherCode = 'B'.repeat(43)
   app.rerender(<GuestEventRoute pathname={'/e/' + otherCode + '/identificacao'} />)
   await screen.findByText('Segundo evento')
-  expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Nome ou apelido' }).value).toBe('')
+  expect((await screen.findByRole<HTMLInputElement>('textbox', { name: 'Nome ou apelido' })).value).toBe('')
   expect(screen.getByRole<HTMLInputElement>('checkbox').checked).toBe(false)
   expect(get.mock.calls[1]?.[0]).toBe(otherCode)
+})
+
+it('mantém o rascunho no fechamento e exige janela aberta ao iniciar pela rota direta', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+  const get = vi.mocked(getPublicEvent)
+  get.mockResolvedValueOnce(result('open', 4_000)).mockResolvedValue(result('closed'))
+  const app = render(<GuestEventRoute pathname={path + '/depoimento'} />)
+  await advance(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Escrever depoimento' }))
+  const field = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Seu depoimento' })
+  fireEvent.change(field, { target: { value: 'Rascunho sintético' } })
+  await advance(4_000)
+  expect(screen.getByText('O prazo para novos envios terminou.')).toBeTruthy()
+  expect(field.value).toBe('Rascunho sintético')
+  fireEvent.click(screen.getByRole('button', { name: 'Revisar' }))
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Enviar' }).disabled).toBe(true)
+  app.rerender(<GuestEventRoute pathname={'/e/' + 'B'.repeat(43) + '/depoimento'} />)
+  await advance(0)
+  expect(screen.queryByText('Rascunho sintético')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Escrever depoimento' })).toBeNull()
+})
+
+it('mantém a edição ao permanecer e reinicia a composição ao confirmar o descarte', async () => {
+  vi.mocked(getPublicEvent).mockResolvedValue(result('open', 90_000))
+  render(<GuestEventRoute pathname={path + '/depoimento'} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Escrever depoimento' }))
+  const field = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Seu depoimento' })
+  fireEvent.change(field, { target: { value: 'Um rascunho de teste' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Descartar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Permanecer' }))
+  expect(field.value).toBe('Um rascunho de teste')
+  fireEvent.click(screen.getByRole('button', { name: 'Descartar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Descartar rascunho' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Escrever depoimento' }))
+  expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Seu depoimento' }).value).toBe('')
 })
