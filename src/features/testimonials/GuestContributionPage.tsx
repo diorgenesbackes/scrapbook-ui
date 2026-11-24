@@ -12,6 +12,7 @@ import { TextTestimonialEditor } from './TextTestimonialEditor'
 import { reviewTextTestimonial, type ReviewedTextTestimonial } from './testimonialText'
 import { usePhotoSelection } from './usePhotoSelection'
 import { useMediaSelection } from './useMediaSelection'
+import { useMediaRecording } from './useMediaRecording'
 import './testimonials.css'
 
 type ReviewedContribution = ReviewedTextTestimonial | ReviewedPhotos | ReviewedMedia
@@ -28,7 +29,7 @@ function title(step: Step, open: boolean, category: ContributionCategory): strin
   if (step.kind === 'choose') return category === 'testimonial' ? 'Deixe um depoimento' : 'Registre um momento'
   if (step.kind === 'write') return 'Escrever depoimento'
   if (step.kind === 'photos') return 'Selecionar fotos'
-  if (step.kind === 'media') return step.media === 'video' ? 'Selecionar vídeo' : 'Selecionar áudio'
+  if (step.kind === 'media') return step.media === 'video' ? 'Gravar ou selecionar vídeo' : 'Gravar ou selecionar áudio'
   if (step.kind === 'identify' && open) return 'Identificação'
   return category === 'testimonial' ? 'Revisar depoimento' : 'Revisar momento'
 }
@@ -43,7 +44,13 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
   const maximum = photoCountLimit(category)
   const selection = usePhotoSelection(maximum)
   const media = useMediaSelection(category)
-  const dirty = text.length > 0 || (caption?.length ?? 0) > 0 || selection.photos.length > 0 || selection.busy || !!media.selected || media.busy
+  const recording = useMediaRecording(category, async (file, kind, signal) => {
+    const selected = await media.select(file, kind, signal)
+    if (!selected || signal.aborted) return
+    const contribution = reviewMedia(eventCode, category, selected, caption)
+    if (contribution) setStep({ kind: 'review', contribution })
+  })
+  const dirty = text.length > 0 || (caption?.length ?? 0) > 0 || selection.photos.length > 0 || selection.busy || !!media.selected || media.busy || recording.active
 
   useLayoutEffect(() => {
     heading.current?.focus()
@@ -108,6 +115,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     setText('')
     setCaption(null)
     selection.clear()
+    recording.cancel()
     media.clear()
     setStep({ kind: 'choose' })
     if (href) {
@@ -143,7 +151,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                 onReview={reviewSelectedPhotos} />
             )}
             {step.kind === 'media' && (
-              <MediaFileEditor category={category} kind={step.media} selection={media} open={open} caption={caption} onCaption={setCaption}
+              <MediaFileEditor category={category} kind={step.media} selection={media} recording={recording} open={open} caption={caption} onCaption={setCaption}
                 onReview={reviewSelectedMedia} />
             )}
 
@@ -185,7 +193,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
             )}
 
             <div className="testimonial-actions">
-              {step.kind === 'photos' && open && (
+              {(step.kind === 'photos' || step.kind === 'media') && open && (
                 <button className="testimonial-secondary" type="button" onClick={event => {
                   if (dirty) setExit({ href: null, trigger: event.currentTarget })
                   else setStep({ kind: 'choose' })

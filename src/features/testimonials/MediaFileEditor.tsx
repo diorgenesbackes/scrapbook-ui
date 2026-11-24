@@ -1,9 +1,11 @@
 import { useLayoutEffect, useRef } from 'react'
 import type { ContributionCategory } from './guestContribution'
 import { MediaCaptionEditor } from './MediaCaptionField'
+import { MediaRecordingControls } from './MediaRecordingControls'
 import { mediaAccept, type MediaIssue, type MediaKind, type SelectedMedia } from './mediaFiles'
 import { releaseMediaElement } from './mediaPreview'
 import type { useMediaSelection } from './useMediaSelection'
+import type { useMediaRecording } from './useMediaRecording'
 
 const previewError = 'Não foi possível preparar a prévia. Tente novamente ou escolha outro arquivo.'
 
@@ -51,10 +53,11 @@ export function ContributionMediaPreview({ media, failed, onFailure, onRetry }: 
   )
 }
 
-export function MediaFileEditor({ category, kind, selection, open, caption, onCaption, onReview }: {
+export function MediaFileEditor({ category, kind, selection, recording, open, caption, onCaption, onReview }: {
   category: ContributionCategory
   kind: MediaKind
   selection: ReturnType<typeof useMediaSelection>
+  recording: ReturnType<typeof useMediaRecording>
   open: boolean
   caption: string | null
   onCaption: (value: string | null) => void
@@ -62,35 +65,44 @@ export function MediaFileEditor({ category, kind, selection, open, caption, onCa
 }) {
   const { selected, issue, busy, previewFailed, select, clear, keepSelection, setPreviewFailed } = selection
   const word = kind === 'video' ? 'vídeo' : 'áudio'
+  const limit = limitMessage(category, kind)
+  const cancelRecording = recording.cancel
+
+  useLayoutEffect(() => () => cancelRecording(), [cancelRecording])
+  useLayoutEffect(() => {
+    if (!open) cancelRecording()
+  }, [open, cancelRecording])
 
   return (
     <div className="photo-editor">
-      <p>{limitMessage(category, kind)}</p>
+      <p>{limit}</p>
+      {open && <MediaRecordingControls kind={kind} recording={recording} selected={!!selected} busy={busy} limit={limit} />}
       {open && (
         <label className="photo-picker">{selected ? 'Trocar ' : 'Selecionar '}{word}
-          <input type="file" accept={mediaAccept[kind]} disabled={busy} onChange={event => {
+          <input type="file" accept={mediaAccept[kind]} disabled={busy} onClick={cancelRecording} onChange={event => {
             const input = event.currentTarget
             const file = input.files?.[0]
             input.value = ''
+            cancelRecording()
             void select(file, kind)
           }} />
         </label>
       )}
-      {busy && <p role="status">Preparando prévia…</p>}
-      {issue && (
+      {busy && !recording.active && <p role="status">Preparando prévia…</p>}
+      {issue && !recording.active && (
         <div role="alert" className="testimonial-error">
           <p><b>{issue.name}</b> {errorMessage(issue.code, category, kind)}</p>
           {selected && <button className="testimonial-secondary" type="button" onClick={keepSelection}>Manter arquivo anterior</button>}
         </div>
       )}
-      {selected && (
+      {selected && !recording.active && (
         <>
           {!busy && <ContributionMediaPreview media={selected} failed={previewFailed} onFailure={() => setPreviewFailed(true)} onRetry={() => setPreviewFailed(false)} />}
           <button className="testimonial-secondary" type="button" disabled={busy} onClick={clear}>Remover {word}</button>
           <MediaCaptionEditor label={'Legenda do ' + word} caption={caption} onChange={onCaption} />
         </>
       )}
-      <button type="button" disabled={!selected || !!issue || busy || previewFailed} onClick={onReview}>Revisar</button>
+      <button type="button" disabled={!selected || !!issue || busy || previewFailed || recording.active} onClick={onReview}>Revisar</button>
     </div>
   )
 }
