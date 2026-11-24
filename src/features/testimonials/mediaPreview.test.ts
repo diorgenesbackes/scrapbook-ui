@@ -5,7 +5,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 
 function player(duration: number, width: number) {
   const element = document.createElement('video')
-  Object.defineProperties(element, { duration: { value: duration }, videoWidth: { value: width } })
+  Object.defineProperties(element, { duration: { value: duration, configurable: true }, videoWidth: { value: width } })
   const unload = vi.spyOn(element, 'load').mockImplementation(() => undefined)
   vi.spyOn(document, 'createElement').mockReturnValue(element)
   return { element, unload }
@@ -48,5 +48,17 @@ it('oferece recuperação quando o navegador não conclui a prévia', async () =
   const result = probeMedia('blob:local', 'audio', 'testimonial', new AbortController().signal)
   vi.advanceTimersByTime(15_000)
   await expect(result).resolves.toEqual({ kind: 'failed', issue: 'preview' })
+  expect(element.getAttribute('src')).toBeNull()
+})
+
+it('mede o fim decodificável do WebM gravado sem duração inicial', async () => {
+  const { element } = player(Infinity, 320)
+  const result = probeMedia('blob:local', 'video', 'moment', new AbortController().signal, true)
+  element.dispatchEvent(new Event('loadedmetadata'))
+  element.dispatchEvent(new Event('loadeddata'))
+  expect(element.currentTime).toBe(61)
+  Reflect.defineProperty(element, 'duration', { value: 59.8 })
+  element.dispatchEvent(new Event('seeked'))
+  await expect(result).resolves.toEqual({ kind: 'ready', durationSeconds: 59.8 })
   expect(element.getAttribute('src')).toBeNull()
 })
