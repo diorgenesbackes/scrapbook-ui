@@ -9,10 +9,12 @@ export function getJson(path: string, signal: AbortSignal, credentials?: Request
   return requestJson(path, credentials ? { credentials } : {}, signal)
 }
 
-export function postJson(path: string, body: unknown, key: string, signal: AbortSignal): Promise<JsonResult> {
+export function postJson(path: string, body: unknown, key: string | undefined, signal: AbortSignal): Promise<JsonResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (key !== undefined) headers['Idempotency-Key'] = key
   return requestJson(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+    headers,
     body: JSON.stringify(body),
   }, signal)
 }
