@@ -75,3 +75,6 @@
 @media (min-width: 48rem) {
   .photo-thumbnails { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.contribution-player { display: block; width: 100%; min-width: 0; max-height: 24rem; }
+.contribution-player + p { margin-top: 0.5rem; }

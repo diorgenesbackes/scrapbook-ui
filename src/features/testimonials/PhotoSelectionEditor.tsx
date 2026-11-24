@@ -1,5 +1,5 @@
 import type { ChangeEvent, ReactNode } from 'react'
-import { PhotoCaptionField } from './PhotoCaptionField'
+import { MediaCaptionEditor } from './MediaCaptionField'
 import { photoAccept, type PhotoIssue, type SelectedPhoto } from './photoFiles'
 import type { usePhotoSelection } from './usePhotoSelection'
 
@@ -68,9 +68,7 @@ export function PhotoSelectionEditor({ selection, maximum, open, caption, onCapt
               <button className="testimonial-secondary" type="button" disabled={busy} onClick={() => remove(photo)}>Remover foto {index + 1}</button>
             </>
           )} />
-          {caption === null ? (
-            <button type="button" className="testimonial-secondary" onClick={() => onCaption('')}>Deseja adicionar uma legenda?</button>
-          ) : <PhotoCaptionField caption={caption} onChange={onCaption} onRemove={() => onCaption(null)} />}
+          <MediaCaptionEditor label="Legenda das fotos" caption={caption} onChange={onCaption} />
         </>
       )}
       <button type="button" disabled={photos.length === 0 || rejected.length > 0 || busy} onClick={onReview}>Revisar</button>
