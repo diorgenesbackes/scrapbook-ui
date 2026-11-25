@@ -40,13 +40,16 @@ export function SubmissionProgress({ view, category, onRetry }: {
     }
     case 'validating':
       return <p role="status">Validando {subject}. Aguarde a confirmação do recebimento.</p>
+    case 'awaiting-receipt':
     case 'interrupted':
     case 'paused':
       return (
         <>
-          <p role="status">{view.kind === 'paused'
-            ? 'O envio de fotos está temporariamente indisponível. Estamos verificando o estado do envio.'
-            : 'O envio foi interrompido. Tente novamente.'}</p>
+          <p role="status">{{
+            paused: 'O envio de fotos está temporariamente indisponível. Estamos verificando o estado do envio.',
+            interrupted: 'O envio foi interrompido. Tente novamente.',
+            'awaiting-receipt': 'Estamos verificando o recebimento do conjunto de fotos.',
+          }[view.kind]}</p>
           <PhotoPositions positions={view.pendingPositions} label="Fotos a transferir" />
           <button type="button" onClick={onRetry} disabled={!view.canRetry}>Tentar novamente</button>
         </>
