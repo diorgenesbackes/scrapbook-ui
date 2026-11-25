@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { photoChecksum } from './photoChecksum'
 import {
-  authorizePhotoUpload, completePhotoSubmission, readPhotoSubmission, submitPhoto, type PhotoStatus, type PhotoSubmission,
+  authorizePhotoUpload, completePhotoSubmission, photoSubmissionDisabledCode, readPhotoSubmission, submitPhoto,
+  type PhotoStatus, type PhotoSubmission,
 } from './photoSubmissionService'
 import { uploadPhoto } from './photoUpload'
 import { newSubmissionAttempt, type SubmissionAttempt, type SubmissionIdentificationData } from './submissionService'
@@ -16,13 +17,13 @@ type PhotoDraft = {
 export type PhotoSubmissionView =
   | { kind: 'idle' | 'preparing' | 'checking' | 'validating' | 'reconciling' | 'expired' }
   | { kind: 'transferring'; loaded: number; total: number; completionDeadlineAt: string | null }
-  | { kind: 'interrupted'; canRetry: boolean }
+  | { kind: 'interrupted' | 'paused'; canRetry: boolean }
   | Extract<PhotoStatus, { kind: 'error' | 'confirmed' }>
 
 type PendingPhoto = {
   submission: SubmissionAttempt<PhotoSubmission>
   file: File
-  stage: 'admission' | 'transfer' | 'completion' | 'validation' | 'reconciliation'
+  stage: 'admission' | 'transfer' | 'paused' | 'completion' | 'validation' | 'reconciliation'
   completionDeadlineAt: string | null
   retryAt: number
 }
@@ -63,7 +64,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
     function wait() {
       if (current.stage === 'reconciliation') setView({ kind: 'reconciling' })
       else if (current.stage === 'validation') setView({ kind: 'validating' })
-      else setView({ kind: 'interrupted', canRetry: performance.now() >= current.retryAt })
+      else setView({ kind: current.stage === 'paused' ? 'paused' : 'interrupted', canRetry: performance.now() >= current.retryAt })
     }
 
     function accept(status: PhotoStatus): boolean {
@@ -78,12 +79,16 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
           break
         case 'unknown':
           current.retryAt = performance.now() + status.retryAfterMs
-          if (current.stage !== 'reconciliation') {
+          if (current.stage !== 'reconciliation' && current.stage !== 'paused') {
             setView({ kind: 'interrupted', canRetry: status.retryAfterMs === 0 })
             return false
           }
           break
         case 'error':
+          if (status.code === photoSubmissionDisabledCode && (current.stage === 'transfer' || current.stage === 'paused')) {
+            current.stage = 'paused'
+            break
+          }
           if (status.code === 'UPLOAD_COMPLETION_DEADLINE_EXCEEDED' && current.stage !== 'admission') {
             current.stage = 'reconciliation'
             break
@@ -116,6 +121,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
         accept(authorization)
         return 'cancelled'
       }
+      current.stage = 'transfer'
       const progress = (loaded: number) => {
         if (!signal.aborted) setView({
           kind: 'transferring', loaded, total: file.size, completionDeadlineAt: current.completionDeadlineAt,
@@ -140,7 +146,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
       return
     }
 
-    if (current.stage === 'transfer') {
+    if (current.stage === 'transfer' || current.stage === 'paused') {
       let result = await transfer()
       if (signal.aborted || result === 'cancelled') return
       if (result === 'authorization-failed') {
@@ -169,7 +175,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
   }, [eventCode, onConfirmed])
 
   useEffect(() => {
-    if (view.kind !== 'interrupted' && view.kind !== 'validating' && view.kind !== 'reconciling') return
+    if (view.kind !== 'interrupted' && view.kind !== 'paused' && view.kind !== 'validating' && view.kind !== 'reconciling') return
     const timer = window.setInterval(() => {
       const current = attempt.current
       if (current) void execute(signal => run(current, 'poll', signal))

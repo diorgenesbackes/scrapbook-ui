@@ -24,9 +24,12 @@ export function SubmissionProgress({ view, onRetry }: { view: PhotoSubmissionVie
     case 'validating':
       return <p role="status">Validando a foto. Aguarde a confirmação do recebimento.</p>
     case 'interrupted':
+    case 'paused':
       return (
         <>
-          <p role="status">O envio foi interrompido. Tente novamente.</p>
+          <p role="status">{view.kind === 'paused'
+            ? 'O envio de fotos está temporariamente indisponível. Estamos verificando o estado do envio.'
+            : 'O envio foi interrompido. Tente novamente.'}</p>
           <button type="button" onClick={onRetry} disabled={!view.canRetry}>Tentar novamente</button>
         </>
       )
