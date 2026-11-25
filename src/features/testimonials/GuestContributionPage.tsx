@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { environment } from '../../config/environment'
 import type { GuestAccessNotice, GuestIdentification } from '../guest-identification/GuestIdentificationForm'
 import { GuestIdentificationStep, type GuestIdentificationConfirmation } from '../guest-identification/GuestIdentificationStep'
 import { PublicEventPage } from '../public-event/PublicEventPage'
+import { photoSubmissionDisabledCode, photoSubmissionUnavailableMessage } from '../submissions/photoSubmissionService'
 import { SubmissionIdentification } from '../submissions/SubmissionIdentification'
 import { SubmissionProgress } from '../submissions/SubmissionProgress'
 import { SubmissionReceipt } from '../submissions/SubmissionReceipt'
@@ -29,7 +31,11 @@ type Step =
   | { kind: 'identified'; contribution: ReviewedContribution & { identification: GuestIdentification }; remembered: boolean; proof: string | null }
 
 function canSubmit(contribution: ReviewedContribution) {
-  return contribution.format === 'text' || (contribution.format === 'photo' && contribution.category === 'testimonial')
+  return contribution.format === 'text' || (isPhotoTestimonial(contribution) && !!environment.submissionUploadOrigin)
+}
+
+function isPhotoTestimonial(contribution: ReviewedContribution): contribution is ReviewedPhotos & { category: 'testimonial' } {
+  return contribution.format === 'photo' && contribution.category === 'testimonial'
 }
 
 type PendingExit = { href: string | null; trigger: HTMLElement | null }
@@ -160,7 +166,8 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     const identification = { guestName, noticeCode, consentProof: step.proof }
     if (contribution.format === 'text') {
       submission.send({ category: 'testimonial', format: 'text', text: contribution.text, identification })
-    } else if (contribution.format === 'photo' && contribution.category === 'testimonial') {
+    } else if (isPhotoTestimonial(contribution) && environment.submissionUploadOrigin
+      && (photoView.kind !== 'error' || photoView.code !== photoSubmissionDisabledCode)) {
       const photo = contribution.photos[0]
       if (photo) photoSubmission.send({
         file: photo.file, declaredMediaType: 'image/' + photo.format, caption: contribution.caption, identification,
@@ -279,6 +286,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                 )}
                 {step.kind === 'identified' && <p role="status">Identificação confirmada.{!step.remembered && ' Nome e concordância estão disponíveis apenas nesta página.'}</p>}
                 {error && <p role="alert" className="testimonial-error">{error.message}</p>}
+                {isPhotoTestimonial(step.contribution) && !environment.submissionUploadOrigin && <p role="status">{photoSubmissionUnavailableMessage}</p>}
                 <div className="testimonial-actions">
                   <button className="testimonial-secondary" type="button" onClick={() => edit(step.contribution.format)}>
                     {{ text: 'Editar texto', photo: 'Editar fotos e legenda', video: 'Editar vídeo e legenda', audio: 'Editar áudio e legenda' }[step.contribution.format]}
@@ -290,8 +298,8 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                       setStep({ kind: 'identify', contribution: step.contribution })
                     }}>Confirmar identificação</button>
                   )}
-                  <button type="button" disabled={!open || renew || error?.code === 'PHOTO_REJECTED' || step.kind !== 'identified'
-                    || !step.proof || !canSubmit(step.contribution)} onClick={send}>Enviar</button>
+                  <button type="button" disabled={!open || renew || error?.code === 'PHOTO_REJECTED' || error?.code === photoSubmissionDisabledCode
+                    || step.kind !== 'identified' || !step.proof || !canSubmit(step.contribution)} onClick={send}>Enviar</button>
                 </div>
               </>
             )}

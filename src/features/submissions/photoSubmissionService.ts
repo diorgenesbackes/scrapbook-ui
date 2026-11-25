@@ -5,6 +5,9 @@ import {
   type SubmissionAttempt, type SubmissionCredential, type SubmissionIdentificationData,
 } from './submissionService'
 
+export const photoSubmissionDisabledCode = 'PHOTO_SUBMISSION_DISABLED'
+export const photoSubmissionUnavailableMessage = 'O envio de fotos está indisponível.'
+
 export type PhotoManifest = {
   fileKey: string
   position: 1
@@ -98,7 +101,11 @@ function uploadUrl(value: unknown): string | null {
 }
 
 export async function submitPhoto(code: string, attempt: SubmissionAttempt<PhotoSubmission>, signal: AbortSignal): Promise<PhotoStatus> {
-  return status(await postJson(submissionBase(code) + '/submissions', attempt.draft, attempt.key, signal, attempt.authorization))
+  const response = await postJson(submissionBase(code) + '/submissions', attempt.draft, attempt.key, signal, attempt.authorization)
+  if (response.kind === 'http' && response.status === 503 && submissionObject(response.payload)?.code === photoSubmissionDisabledCode) {
+    return { kind: 'error', code: photoSubmissionDisabledCode, message: photoSubmissionUnavailableMessage }
+  }
+  return status(response)
 }
 
 export async function readPhotoSubmission(code: string, attempt: SubmissionCredential, signal: AbortSignal): Promise<PhotoStatus> {
