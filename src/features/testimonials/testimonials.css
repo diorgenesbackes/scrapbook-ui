@@ -82,3 +82,4 @@
 .contribution-player + p { margin-top: 0.5rem; }
 .media-recording { display: grid; gap: 0.75rem; justify-items: start; width: 100%; }
 .media-recording [role="timer"] { font-variant-numeric: tabular-nums; }
+.submission-identification { border: 0; padding: 0; margin: 0; min-width: 0; }
