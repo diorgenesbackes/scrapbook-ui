@@ -53,6 +53,9 @@ function failure(response: Response): Failure {
   if (response.kind === 'cancelled') return { kind: 'cancelled' }
   if (response.kind === 'http') {
     if (response.status === 404) return { kind: 'missing' }
+    if (response.status === 503 && submissionObject(response.payload)?.code === photoSubmissionDisabledCode) {
+      return { kind: 'error', code: photoSubmissionDisabledCode, message: photoSubmissionUnavailableMessage }
+    }
     const delay = response.retryAfter
     if (delay) {
       const interval = /^\d+$/.test(delay) ? Number(delay) * 1_000 : Date.parse(delay) - Date.now()
@@ -101,11 +104,7 @@ function uploadUrl(value: unknown): string | null {
 }
 
 export async function submitPhoto(code: string, attempt: SubmissionAttempt<PhotoSubmission>, signal: AbortSignal): Promise<PhotoStatus> {
-  const response = await postJson(submissionBase(code) + '/submissions', attempt.draft, attempt.key, signal, attempt.authorization)
-  if (response.kind === 'http' && response.status === 503 && submissionObject(response.payload)?.code === photoSubmissionDisabledCode) {
-    return { kind: 'error', code: photoSubmissionDisabledCode, message: photoSubmissionUnavailableMessage }
-  }
-  return status(response)
+  return status(await postJson(submissionBase(code) + '/submissions', attempt.draft, attempt.key, signal, attempt.authorization))
 }
 
 export async function readPhotoSubmission(code: string, attempt: SubmissionCredential, signal: AbortSignal): Promise<PhotoStatus> {
