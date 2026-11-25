@@ -5,16 +5,18 @@ type JsonResult =
   | { kind: 'http'; status: number; payload: unknown; retryAfter: string | null }
   | { kind: 'cancelled' | 'network' | 'invalid-json' | 'empty' }
 
-export function getJson(path: string, signal: AbortSignal, credentials?: RequestCredentials): Promise<JsonResult> {
-  return requestJson(path, credentials ? { credentials } : {}, signal)
+export function getJson(path: string, signal: AbortSignal, credentials?: RequestCredentials, authorization?: string): Promise<JsonResult> {
+  return requestJson(path, { ...credentials && { credentials }, ...authorization && { headers: { Authorization: authorization } } }, signal)
 }
 
-export function postJson(path: string, body: unknown, key: string | undefined, signal: AbortSignal): Promise<JsonResult> {
+export function postJson(path: string, body: unknown, key: string | undefined, signal: AbortSignal, authorization?: string): Promise<JsonResult> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (key !== undefined) headers['Idempotency-Key'] = key
+  if (authorization) headers.Authorization = authorization
   return requestJson(path, {
     method: 'POST',
     headers,
+    ...authorization && { credentials: 'omit' },
     body: JSON.stringify(body),
   }, signal)
 }
