@@ -8,12 +8,17 @@ import type { PublicEvent, SubmissionState } from './publicEventService'
 import { usePublicEvent } from './usePublicEvent'
 import './public-event.css'
 
-export function PublicEventPage({ code, renderEvent }: {
+export function PublicEventPage({ code, renderEvent, renderPending }: {
   code: string | undefined
   renderEvent?: (event: PublicEvent, state: SubmissionState) => ReactNode
+  renderPending?: (() => ReactNode) | undefined
 }) {
   const { view, retry } = usePublicEvent(code)
   const shareUrl = code && publicEventUrl(code, environment.publicSiteOrigin, window.location.origin)
+
+  if (view.kind !== 'ready' && renderPending) {
+    return <main id="conteudo" tabIndex={-1} className="main guest-page">{renderPending()}</main>
+  }
 
   return (
     <main id="conteudo" tabIndex={-1} className="main guest-page" aria-busy={view.kind === 'loading'}>

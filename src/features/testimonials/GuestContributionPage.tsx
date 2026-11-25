@@ -3,7 +3,9 @@ import type { GuestAccessNotice, GuestIdentification } from '../guest-identifica
 import { GuestIdentificationStep, type GuestIdentificationConfirmation } from '../guest-identification/GuestIdentificationStep'
 import { PublicEventPage } from '../public-event/PublicEventPage'
 import { SubmissionIdentification } from '../submissions/SubmissionIdentification'
+import { SubmissionProgress } from '../submissions/SubmissionProgress'
 import { SubmissionReceipt } from '../submissions/SubmissionReceipt'
+import { usePhotoSubmission } from '../submissions/usePhotoSubmission'
 import { useTextSubmission } from '../submissions/useTextSubmission'
 import { DraftDiscardDialog } from './DraftDiscardDialog'
 import { identifyContribution, type ContributionCategory } from './guestContribution'
@@ -25,6 +27,10 @@ type Step =
   | { kind: 'media'; media: MediaKind }
   | { kind: 'review' | 'identify'; contribution: ReviewedContribution }
   | { kind: 'identified'; contribution: ReviewedContribution & { identification: GuestIdentification }; remembered: boolean; proof: string | null }
+
+function canSubmit(contribution: ReviewedContribution) {
+  return contribution.format === 'text' || (contribution.format === 'photo' && contribution.category === 'testimonial')
+}
 
 type PendingExit = { href: string | null; trigger: HTMLElement | null }
 
@@ -57,13 +63,23 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     setText('')
     setStep({ kind: 'choose' })
   }, [])
+  const clearPhotos = selection.clear
+  const releaseConfirmedPhoto = useCallback(() => {
+    clearPhotos()
+    setCaption(null)
+    setExit(null)
+    setStep({ kind: 'choose' })
+  }, [clearPhotos])
+  const photoSubmission = usePhotoSubmission(eventCode, releaseConfirmedPhoto)
+  const photoView = photoSubmission.view
+  const photoInProgress = photoView.kind !== 'idle' && photoView.kind !== 'confirmed' && photoView.kind !== 'error'
   const submission = useTextSubmission(eventCode, releaseConfirmedDraft)
-  const submitting = submission.view.kind === 'sending' || submission.view.kind === 'checking' || submission.view.kind === 'unknown'
+  const submittingText = submission.view.kind === 'sending' || submission.view.kind === 'checking' || submission.view.kind === 'unknown'
   const dirty = text.length > 0 || (caption?.length ?? 0) > 0 || selection.photos.length > 0 || selection.busy || !!media.selected || media.busy || recording.active
 
   useLayoutEffect(() => {
     heading.current?.focus()
-  }, [step.kind, submitting])
+  }, [step.kind, submittingText, photoInProgress])
 
   useEffect(() => {
     if (!dirty) return
@@ -114,6 +130,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
 
   function edit(format: ReviewedContribution['format']) {
     submission.reset()
+    photoSubmission.reset()
     if (format === 'text') setStep({ kind: 'write' })
     else if (format === 'photo') setStep({ kind: 'photos' })
     else setStep({ kind: 'media', media: format })
@@ -128,6 +145,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     recording.cancel()
     media.clear()
     submission.reset()
+    photoSubmission.reset()
     setStep({ kind: 'choose' })
     if (href) {
       confirmedExit.current = true
@@ -135,10 +153,56 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     }
   }
 
+  function send() {
+    if (step.kind !== 'identified' || !step.proof) return
+    const { contribution } = step
+    const { guestName, noticeCode } = contribution.identification
+    const identification = { guestName, noticeCode, consentProof: step.proof }
+    if (contribution.format === 'text') {
+      submission.send({ category: 'testimonial', format: 'text', text: contribution.text, identification })
+    } else if (contribution.format === 'photo' && contribution.category === 'testimonial') {
+      const photo = contribution.photos[0]
+      if (photo) photoSubmission.send({
+        file: photo.file, declaredMediaType: 'image/' + photo.format, caption: contribution.caption, identification,
+      })
+    }
+  }
+
+  function discardButton() {
+    return <button className="testimonial-secondary" type="button"
+      onClick={event => setExit({ href: null, trigger: event.currentTarget })}>Descartar</button>
+  }
+
+  function photoProgress(eventName?: string, windowMessage?: string) {
+    return (
+      <section className="testimonial">
+        {eventName && <p className="testimonial-event">{eventName}</p>}
+        <h1 ref={heading} tabIndex={-1}>Envio do depoimento</h1>
+        {windowMessage && <p role="status">{windowMessage}</p>}
+        <SubmissionProgress view={photoView} onRetry={photoSubmission.retry} />
+        <div className="testimonial-actions">
+          <a href={'/e/' + eventCode}>Voltar ao evento</a>
+          {dirty && discardButton()}
+        </div>
+      </section>
+    )
+  }
+
+  function photoReceipt(confirmedAt: string, open: boolean) {
+    return <SubmissionReceipt eventCode={eventCode} confirmedAt={confirmedAt} open={open} onRestart={photoSubmission.reset} />
+  }
+
+  const renderPendingPhoto = photoView.kind === 'confirmed' ? () => photoReceipt(photoView.confirmedAt, false)
+    : photoInProgress ? () => photoProgress() : undefined
+
   return (
     <>
-      <PublicEventPage code={eventCode} renderEvent={(event, state) => {
+      <PublicEventPage code={eventCode} renderPending={renderPendingPhoto} renderEvent={(event, state) => {
         const open = state === 'open'
+        const windowMessage = open ? undefined : state === 'closed'
+          ? 'O prazo para novos envios terminou.' : 'Novos envios ainda não estão disponíveis.'
+        if (photoView.kind === 'confirmed') return photoReceipt(photoView.confirmedAt, open)
+        if (photoInProgress) return photoProgress(event.name, windowMessage)
         if (submission.view.kind === 'confirmed') {
           return <SubmissionReceipt eventCode={eventCode} confirmedAt={submission.view.confirmedAt} open={open} onRestart={submission.reset} />
         }
@@ -149,13 +213,15 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
           if (identified) setStep({ kind: 'identified', contribution: identified, remembered: value.remembered, proof })
         }
 
-        const identifying = step.kind === 'identify' && open && (step.contribution.format === 'text' || notice)
-        const renew = submission.view.kind === 'error' && submission.view.code === 'SUBMISSION_CONSENT_REQUIRED'
+        const identifying = step.kind === 'identify' && open && (canSubmit(step.contribution) || notice)
+        const view = 'contribution' in step && step.contribution.format === 'photo' ? photoView : submission.view
+        const error = view.kind === 'error' ? view : null
+        const renew = error?.code === 'SUBMISSION_CONSENT_REQUIRED'
         return (
           <section className="testimonial">
             <p className="testimonial-event">{event.name}</p>
-            <h1 ref={heading} tabIndex={-1}>{submitting ? 'Envio do depoimento' : title(step, open, category)}</h1>
-            {!open && <p role="status">{state === 'closed' ? 'O prazo para novos envios terminou.' : 'Novos envios ainda não estão disponíveis.'}</p>}
+            <h1 ref={heading} tabIndex={-1}>{submittingText ? 'Envio do depoimento' : title(step, open, category)}</h1>
+            {windowMessage && <p role="status">{windowMessage}</p>}
 
             {step.kind === 'choose' && open && (
               <div className="testimonial-actions">
@@ -177,14 +243,14 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
 
             {identifying && step.kind === 'identify' ? (
               <>
-                {step.contribution.format === 'text'
+                {canSubmit(step.contribution)
                   ? <SubmissionIdentification eventCode={eventCode} fallback={notice}
                     onConfirm={(value, proof) => identify(step.contribution, value, proof)} />
                   : notice && <GuestIdentificationStep eventCode={eventCode} notice={notice}
                     onConfirm={value => identify(step.contribution, value, null)} />}
                 <button className="testimonial-secondary" type="button" onClick={() => setStep({ kind: 'review', contribution: step.contribution })}>Voltar à revisão</button>
               </>
-            ) : submitting ? (
+            ) : submittingText ? (
               <>
                 <p role="status">{submission.view.kind === 'sending'
                   ? 'Enviando o depoimento para validação.' : 'Estamos verificando o estado do envio.'}</p>
@@ -212,24 +278,20 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                   </section>
                 )}
                 {step.kind === 'identified' && <p role="status">Identificação confirmada.{!step.remembered && ' Nome e concordância estão disponíveis apenas nesta página.'}</p>}
-                {submission.view.kind === 'error' && <p role="alert" className="testimonial-error">{submission.view.message}</p>}
+                {error && <p role="alert" className="testimonial-error">{error.message}</p>}
                 <div className="testimonial-actions">
                   <button className="testimonial-secondary" type="button" onClick={() => edit(step.contribution.format)}>
                     {{ text: 'Editar texto', photo: 'Editar fotos e legenda', video: 'Editar vídeo e legenda', audio: 'Editar áudio e legenda' }[step.contribution.format]}
                   </button>
-                  {open && (notice || step.contribution.format === 'text') && (step.kind === 'review' || renew) && !media.previewFailed && (
+                  {open && (notice || canSubmit(step.contribution)) && (step.kind === 'review' || renew) && !media.previewFailed && (
                     <button type="button" onClick={() => {
                       submission.reset()
+                      photoSubmission.reset()
                       setStep({ kind: 'identify', contribution: step.contribution })
                     }}>Confirmar identificação</button>
                   )}
-                  <button type="button" disabled={!open || renew || step.kind !== 'identified' || !step.proof || step.contribution.format !== 'text'}
-                    onClick={() => {
-                      if (step.kind !== 'identified' || !step.proof || step.contribution.format !== 'text') return
-                      const { text: message, identification } = step.contribution
-                      submission.send({ category: 'testimonial', format: 'text', text: message,
-                        identification: { guestName: identification.guestName, noticeCode: identification.noticeCode, consentProof: step.proof } })
-                    }}>Enviar</button>
+                  <button type="button" disabled={!open || renew || error?.code === 'PHOTO_REJECTED' || step.kind !== 'identified'
+                    || !step.proof || !canSubmit(step.contribution)} onClick={send}>Enviar</button>
                 </div>
               </>
             )}
@@ -242,7 +304,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                 }}>Voltar aos formatos</button>
               )}
               <a href={'/e/' + eventCode}>Voltar ao evento</a>
-              {dirty && <button className="testimonial-secondary" type="button" onClick={event => setExit({ href: null, trigger: event.currentTarget })}>Descartar</button>}
+              {dirty && discardButton()}
             </div>
           </section>
         )
