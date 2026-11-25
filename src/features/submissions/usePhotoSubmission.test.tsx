@@ -15,7 +15,7 @@ const confirmedAt = '2032-03-01T16:02:00Z'
 const checksum = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
 const file = new File(['pict'], 'fixture.png', { type: 'image/png' })
 const draft = {
-  file, declaredMediaType: file.type, caption: 'Foto sintética',
+  category: 'testimonial' as const, files: [{ file, declaredMediaType: file.type }], caption: 'Foto sintética',
   identification: { guestName: 'Convidada', noticeCode: 'fixture', consentProof: 'prova' },
 }
 
@@ -60,7 +60,7 @@ function admittedAttempt() {
   const authorization = headers.get('Authorization')
   const payload = JSON.parse(String(request!.body)) as PhotoSubmission
   const url = api + '/' + key
-  const upload = url + '/files/' + payload.files[0].fileKey + '/upload-authorizations'
+  const upload = url + '/files/' + payload.files[0]!.fileKey + '/upload-authorizations'
   expect(key).toBeTruthy()
   expect(authorization).toMatch(/^Bearer [a-f0-9]{64}$/)
   expect(payload).toMatchObject({

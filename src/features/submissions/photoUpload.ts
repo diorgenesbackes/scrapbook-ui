@@ -54,8 +54,12 @@ export function uploadPhoto(
       }
       xhr.onload = () => {
         const status = xhr.status
-        if (status >= 200 && status < 300) finish('transferred')
-        else finish(status === 401 || status === 403 ? 'authorization-failed' : 'interrupted')
+        if (status >= 200 && status < 300) {
+          if (sentBytes < file.size) progress(file.size)
+          finish('transferred')
+        } else {
+          finish(status === 401 || status === 403 ? 'authorization-failed' : 'interrupted')
+        }
       }
       xhr.onerror = () => finish('interrupted')
       xhr.onabort = () => finish('cancelled')
