@@ -1,8 +1,8 @@
-import { environment } from '../../config/environment'
 import { getJson, postJson } from '../../lib/httpClient'
+import { readUploadAuthorization } from './submissionUpload'
 import {
-  isSubmissionInstant, issue, submissionBase, submissionObject,
-  type SubmissionAttempt, type SubmissionCredential, type SubmissionIdentificationData,
+  isSubmissionInstant, issue, submissionAttemptPath, submissionBase, submissionObject,
+  type SubmissionAttempt, type SubmissionIdentificationData,
 } from './submissionService'
 
 export const photoSubmissionDisabledCode = 'PHOTO_SUBMISSION_DISABLED'
@@ -40,19 +40,7 @@ export type PhotoStatus =
   | { kind: 'expired'; problemPositions?: number[] }
   | { kind: 'confirmed'; confirmedAt: string }
 
-export type PhotoUploadAuthorization = {
-  kind: 'authorized'
-  url: string
-  mediaType: string
-  checksum: string
-  expiresAt: string
-}
-
 type Response = Awaited<ReturnType<typeof getJson>>
-
-function attemptPath(code: string, attempt: SubmissionCredential) {
-  return submissionBase(code) + '/submissions/' + attempt.key
-}
 
 function failure(response: Response, category: PhotoCategory): Failure {
   if (response.kind === 'cancelled') return { kind: 'cancelled' }
@@ -143,43 +131,23 @@ function status(response: Response, draft: PhotoSubmission): PhotoStatus {
   return failure(response, draft.category)
 }
 
-function uploadUrl(value: unknown): string | null {
-  if (typeof value !== 'string' || !environment.submissionUploadOrigin) return null
-  try {
-    const url = new URL(value)
-    const http = url.protocol === 'https:' || url.protocol === 'http:'
-    return http && url.origin === environment.submissionUploadOrigin && !url.username && !url.password && !url.hash
-      ? value : null
-  } catch {
-    return null
-  }
-}
-
 export async function submitPhoto(code: string, attempt: SubmissionAttempt<PhotoSubmission>, signal: AbortSignal): Promise<PhotoStatus> {
   return status(await postJson(submissionBase(code) + '/submissions', attempt.draft, attempt.key, signal, attempt.authorization), attempt.draft)
 }
 
 export async function readPhotoSubmission(code: string, attempt: SubmissionAttempt<PhotoSubmission>, signal: AbortSignal): Promise<PhotoStatus> {
-  return status(await getJson(attemptPath(code, attempt), signal, 'omit', attempt.authorization), attempt.draft)
+  return status(await getJson(submissionAttemptPath(code, attempt), signal, 'omit', attempt.authorization), attempt.draft)
 }
 
 export async function authorizePhotoUpload(
   code: string, attempt: SubmissionAttempt<PhotoSubmission>, file: PhotoManifest, signal: AbortSignal,
-): Promise<PhotoUploadAuthorization | Failure> {
-  const path = attemptPath(code, attempt) + '/files/' + file.fileKey + '/upload-authorizations'
+) {
+  const path = submissionAttemptPath(code, attempt) + '/files/' + file.fileKey + '/upload-authorizations'
   const response = await postJson(path, {}, undefined, signal, attempt.authorization)
   if (response.kind !== 'ok') return failure(response, attempt.draft.category)
-  const grant = submissionObject(response.payload)
-  if (grant?.method !== 'PUT' || !isSubmissionInstant(grant.expiresAt)) return failure(response, attempt.draft.category)
-  const url = uploadUrl(grant.url)
-  const headers = Object.entries(submissionObject(grant.headers) ?? {})
-  const mediaType = headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1]
-  const checksum = headers.find(([name]) => name.toLowerCase() === 'x-amz-checksum-sha256')?.[1]
-  return url && headers.length === 2 && mediaType === file.declaredMediaType && checksum === file.sha256
-    ? { kind: 'authorized', url, mediaType, checksum, expiresAt: grant.expiresAt }
-    : failure(response, attempt.draft.category)
+  return readUploadAuthorization(response.payload, file.declaredMediaType, file.sha256) ?? failure(response, attempt.draft.category)
 }
 
 export async function completePhotoSubmission(code: string, attempt: SubmissionAttempt<PhotoSubmission>, signal: AbortSignal): Promise<PhotoStatus> {
-  return status(await postJson(attemptPath(code, attempt) + '/completion', {}, undefined, signal, attempt.authorization), attempt.draft)
+  return status(await postJson(submissionAttemptPath(code, attempt) + '/completion', {}, undefined, signal, attempt.authorization), attempt.draft)
 }
