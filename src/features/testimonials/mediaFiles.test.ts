@@ -60,3 +60,24 @@ it('preserva o arquivo original e metadados no contrato, mantendo a URL fora del
   expect(reviewMedia('evento-A', 'moment', media, null)).toBeNull()
   expect(reviewMedia('evento-A', 'testimonial', media, '😀'.repeat(501))).toBeNull()
 })
+
+it.each([
+  { category: 'moment', container: 'mov', seconds: 60 },
+  { category: 'testimonial', container: 'webm', seconds: 300 },
+] as const)('revisa vídeo $container de $category nos limites de tamanho, duração e legenda', ({ category, container, seconds }) => {
+  const file = new File(['video'], 'fixture.' + container)
+  const selected: SelectedMedia = {
+    file, kind: 'video', container, sizeBytes: 500_000_000, durationSeconds: seconds, url: 'blob:local',
+  }
+  const caption = '🎉'.repeat(500)
+
+  expect(reviewMedia('event', category, selected, caption)).toEqual({
+    eventCode: 'event', category, format: 'video',
+    media: { file, container, sizeBytes: 500_000_000, durationSeconds: seconds }, caption,
+  })
+  expect(reviewMedia('event', category, selected, null)?.caption).toBeNull()
+  expect(reviewMedia('event', category, selected, '  ')?.caption).toBeNull()
+  expect(reviewMedia('event', category, selected, caption + '🎉')).toBeNull()
+  expect(reviewMedia('event', category, { ...selected, durationSeconds: seconds + 0.001 }, null)).toBeNull()
+  expect(reviewMedia('event', category, { ...selected, sizeBytes: selected.sizeBytes + 1 }, null)).toBeNull()
+})
