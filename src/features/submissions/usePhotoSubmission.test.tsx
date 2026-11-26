@@ -15,7 +15,7 @@ const confirmedAt = '2032-03-01T16:02:00Z'
 const checksum = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
 const file = new File(['pict'], 'fixture.png', { type: 'image/png' })
 const draft = {
-  file, declaredMediaType: file.type, caption: 'Foto sintética',
+  category: 'testimonial' as const, files: [{ file, declaredMediaType: file.type }], caption: 'Foto sintética',
   identification: { guestName: 'Convidada', noticeCode: 'fixture', consentProof: 'prova' },
 }
 
@@ -60,7 +60,7 @@ function admittedAttempt() {
   const authorization = headers.get('Authorization')
   const payload = JSON.parse(String(request!.body)) as PhotoSubmission
   const url = api + '/' + key
-  const upload = url + '/files/' + payload.files[0].fileKey + '/upload-authorizations'
+  const upload = url + '/files/' + payload.files[0]!.fileKey + '/upload-authorizations'
   expect(key).toBeTruthy()
   expect(authorization).toMatch(/^Bearer [a-f0-9]{64}$/)
   expect(payload).toMatchObject({
@@ -171,4 +171,246 @@ it('recusa uma autorização que aponta para outra origem de upload', async () =
   expect(result.current.view).toEqual({ kind: 'interrupted', canRetry: true })
   expect(PhotoRequest.requests).toHaveLength(0)
   expect(fetchApi).toHaveBeenCalledTimes(2)
+})
+
+const momentFiles = [
+  new File(['1234'], 'segunda-na-lista-de-nomes.png', { type: 'image/png' }),
+  new File(['567890'], 'primeira-na-lista-de-nomes.png', { type: 'image/png' }),
+  new File(['abc'], 'terceira.png', { type: 'image/png' }),
+]
+const momentDraft = {
+  category: 'moment' as const,
+  files: momentFiles.map(file => ({ file, declaredMediaType: file.type })),
+  caption: 'Uma legenda para todas as fotos',
+  identification: draft.identification,
+}
+
+function receivingMoment(pendingPositions: number[]) {
+  return Response.json({ state: 'receiving', completionDeadlineAt: deadline, pendingPositions })
+}
+
+function expectMomentAttempt() {
+  const [, request] = fetchApi.mock.calls[0]!
+  const headers = new Headers(request!.headers)
+  const key = headers.get('Idempotency-Key')
+  const authorization = headers.get('Authorization')
+  const payload = JSON.parse(String(request!.body)) as PhotoSubmission
+  const url = api + '/' + key
+  const keys = payload.files.map(({ fileKey }) => fileKey)
+
+  expect(key).toBeTruthy()
+  expect(authorization).toMatch(/^Bearer [a-f0-9]{64}$/)
+  expect(payload).toEqual({
+    category: 'moment',
+    format: 'photo',
+    caption: momentDraft.caption,
+    identification: momentDraft.identification,
+    files: momentFiles.map((file, index) => ({
+      fileKey: expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i),
+      position: index + 1,
+      declaredMediaType: file.type,
+      sizeBytes: file.size,
+      sha256: checksum,
+    })),
+  })
+  expect(new Set(keys).size).toBe(momentFiles.length)
+  for (const [, call] of fetchApi.mock.calls) {
+    expect(new Headers(call!.headers).get('Authorization')).toBe(authorization)
+  }
+  return { url, uploads: keys.map(fileKey => url + '/files/' + fileKey + '/upload-authorizations') }
+}
+
+it('envia o manifesto do momento na ordem revisada e soma apenas os bytes transferidos', async () => {
+  vi.useFakeTimers()
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment([1, 2, 3]))
+    .mockResolvedValueOnce(authorize('first'))
+    .mockResolvedValueOnce(authorize('second'))
+    .mockResolvedValueOnce(authorize('third'))
+    .mockResolvedValueOnce(validating())
+    .mockResolvedValueOnce(confirmed())
+  const onConfirmed = vi.fn()
+  const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
+
+  await act(async () => result.current.send(momentDraft))
+
+  const first = PhotoRequest.requests[0]!
+  act(() => first.upload.onprogress?.(new ProgressEvent('progress', { loaded: 2, total: momentFiles[0]!.size })))
+  expect(result.current.view).toEqual({ kind: 'transferring', loaded: 2, total: 13, completionDeadlineAt: deadline })
+
+  await act(async () => first.finish(200))
+
+  expect(result.current.view).toEqual({ kind: 'transferring', loaded: 4, total: 13, completionDeadlineAt: deadline })
+  const second = PhotoRequest.requests[1]!
+  act(() => second.upload.onprogress?.(new ProgressEvent('progress', { loaded: 3, total: momentFiles[1]!.size })))
+  expect(result.current.view).toEqual({ kind: 'transferring', loaded: 7, total: 13, completionDeadlineAt: deadline })
+
+  await act(async () => second.finish(200))
+
+  expect(result.current.view).toEqual({ kind: 'transferring', loaded: 10, total: 13, completionDeadlineAt: deadline })
+  expect(fetchApi).toHaveBeenCalledTimes(4)
+  expect(onConfirmed).not.toHaveBeenCalled()
+
+  await act(async () => PhotoRequest.requests[2]!.finish(200))
+
+  expect(result.current.view).toEqual({ kind: 'validating' })
+  expect(onConfirmed).not.toHaveBeenCalled()
+
+  await act(async () => vi.advanceTimersByTimeAsync(5_000))
+
+  expect(result.current.view).toEqual({ kind: 'confirmed', confirmedAt })
+  expect(onConfirmed).toHaveBeenCalledOnce()
+  expect(vi.mocked(photoChecksum).mock.calls.map(([file]) => file)).toEqual(momentFiles)
+  expect(PhotoRequest.requests.map(request => request.send.mock.calls[0]![0])).toEqual(momentFiles)
+  const { url, uploads } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([api, ...uploads, url + '/completion', url])
+})
+
+it('consulta de novo antes de retomar e transfere apenas a posição ainda pendente na mesma tentativa', async () => {
+  vi.useFakeTimers()
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment([1, 2, 3]))
+    .mockResolvedValueOnce(authorize('first'))
+    .mockResolvedValueOnce(authorize('second'))
+    .mockResolvedValueOnce(receivingMoment([2, 3]))
+    .mockResolvedValueOnce(receivingMoment([3]))
+    .mockResolvedValueOnce(authorize('third'))
+    .mockResolvedValueOnce(validating())
+  const onConfirmed = vi.fn()
+  const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
+
+  await act(async () => result.current.send(momentDraft))
+  await act(async () => PhotoRequest.requests[0]!.finish(200))
+  await act(async () => PhotoRequest.requests[1]!.onerror?.())
+
+  expect(result.current.view).toEqual({ kind: 'interrupted', canRetry: true, pendingPositions: [2, 3] })
+
+  await act(async () => result.current.retry())
+
+  const resumed = PhotoRequest.requests[2]!
+  expect(resumed.send).toHaveBeenCalledWith(momentFiles[2])
+  expect(result.current.view).toEqual({ kind: 'transferring', loaded: 10, total: 13, completionDeadlineAt: deadline })
+
+  await act(async () => resumed.finish(200))
+
+  expect(result.current.view).toEqual({ kind: 'validating' })
+  expect(onConfirmed).not.toHaveBeenCalled()
+  expect(PhotoRequest.requests).toHaveLength(3)
+  expect(photoChecksum).toHaveBeenCalledTimes(3)
+  const { url, uploads } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([
+    api, uploads[0], uploads[1], url, url, uploads[2], url + '/completion',
+  ])
+})
+
+it('passa a apenas consultar o momento ao receber o estado de reconciliação do servidor', async () => {
+  vi.useFakeTimers()
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(authorize('first'))
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(Response.json({ state: 'reconciling' }))
+    .mockResolvedValueOnce(confirmed())
+  const onConfirmed = vi.fn()
+  const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
+
+  await act(async () => result.current.send(momentDraft))
+  await act(async () => PhotoRequest.requests[0]!.finish(200))
+  expect(result.current.view.kind).toBe('awaiting-receipt')
+  await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+  expect(result.current.view).toEqual({ kind: 'reconciling' })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+  expect(result.current.view).toEqual({ kind: 'confirmed', confirmedAt })
+  expect(onConfirmed).toHaveBeenCalledOnce()
+  const { url, uploads } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([api, uploads[1], url + '/completion', url, url])
+})
+
+it.each([
+  { state: 'rejected', code: 'photo-invalid', problemPositions: [2, 3], kind: 'error' },
+  { state: 'expired', code: 'submission-deadline-exceeded', problemPositions: [2, 3], kind: 'expired' },
+])('preserva as posições afetadas no estado terminal $state', async ({ state, code, problemPositions, kind }) => {
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment([2, 3]))
+    .mockResolvedValueOnce(authorize('second'))
+    .mockResolvedValueOnce(Response.json({ state, code, problems: problemPositions.map(position => ({
+      position, code: state === 'rejected' && position === 3 ? 'photo-resource-budget' : code,
+    })) }))
+  const onConfirmed = vi.fn()
+  const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
+
+  await act(async () => result.current.send(momentDraft))
+  await act(async () => PhotoRequest.requests[0]!.onerror?.())
+
+  expect(result.current.view).toMatchObject({ kind })
+  if (state === 'rejected') {
+    expect(result.current.view).toMatchObject({
+      code: 'PHOTO_REJECTED',
+      message: 'O conjunto não foi enviado. Confira os arquivos indicados.',
+      photoProblems: [
+        { position: 2, message: 'A foto não passou na validação. Confira o arquivo ou escolha outra foto.' },
+        { position: 3, message: 'A foto excedeu os limites de processamento. Escolha outro arquivo.' },
+      ],
+    })
+  } else {
+    expect(result.current.view).toMatchObject({ problemPositions })
+  }
+  await act(async () => result.current.retry())
+
+  expect(onConfirmed).not.toHaveBeenCalled()
+  expect(PhotoRequest.requests).toHaveLength(1)
+  const { url, uploads } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([api, uploads[1], url])
+})
+
+it.each([[0], [4], [1, 1]])('não autoriza uploads com posições pendentes inválidas: %j', async (...positions) => {
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment(positions))
+    .mockResolvedValueOnce(receivingMoment(positions))
+  const { result } = renderHook(() => usePhotoSubmission('event', vi.fn()))
+
+  await act(async () => result.current.send(momentDraft))
+
+  expect(result.current.view.kind).toBe('interrupted')
+  expect(PhotoRequest.requests).toHaveLength(0)
+  const { url } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([api, url])
+})
+
+it('retoma um PUT aceito pelo transporte quando o servidor ainda não tem o recibo da posição', async () => {
+  vi.useFakeTimers()
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(authorize('second-first-put'))
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(authorize('second-renewed-put'))
+    .mockResolvedValueOnce(validating())
+  const onConfirmed = vi.fn()
+  const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
+
+  await act(async () => result.current.send(momentDraft))
+  const first = PhotoRequest.requests[0]!
+  expect(first.send).toHaveBeenCalledWith(momentFiles[1])
+  await act(async () => first.finish(200))
+
+  expect(result.current.view).toEqual({ kind: 'awaiting-receipt', canRetry: true, pendingPositions: [2] })
+  expect(onConfirmed).not.toHaveBeenCalled()
+
+  await act(async () => result.current.retry())
+
+  const resumed = PhotoRequest.requests[1]!
+  expect(resumed.send).toHaveBeenCalledWith(momentFiles[1])
+  act(() => resumed.upload.onprogress?.(new ProgressEvent('progress', { loaded: 3, total: momentFiles[1]!.size })))
+  expect(result.current.view).toEqual({ kind: 'transferring', loaded: 10, total: 13, completionDeadlineAt: deadline })
+
+  await act(async () => resumed.finish(200))
+
+  expect(result.current.view).toEqual({ kind: 'validating' })
+  expect(onConfirmed).not.toHaveBeenCalled()
+  expect(PhotoRequest.requests).toHaveLength(2)
+  const { url, uploads } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([
+    api, uploads[1], url + '/completion', url, uploads[1], url + '/completion',
+  ])
 })
