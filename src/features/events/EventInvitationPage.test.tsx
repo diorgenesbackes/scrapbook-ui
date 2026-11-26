@@ -52,3 +52,24 @@ it.each([['locked', 'Os convites deste evento estão travados.'], ['full', 'Este
     expect(screen.queryByRole('button', { name: 'Gerar convite' })).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Link do convite' })).toBeNull()
   })
+
+it.each(['locked', 'unavailable'] as const)('reconsulta após recusar a substituição como %s e retira o convite', async kind => {
+  vi.mocked(getCurrentInvitation).mockResolvedValueOnce(pending).mockResolvedValue({ kind: 'locked' })
+  vi.mocked(createInvitation).mockResolvedValue({ kind })
+  render(<EventInvitationPage eventId="42" />)
+
+  await screen.findByRole('img', { name: 'QR code do convite de responsável' })
+  expect(screen.getByRole('textbox', { name: 'Link do convite' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Substituir convite' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmar substituição' }))
+
+  await waitFor(() => expect(getCurrentInvitation).toHaveBeenCalledTimes(2))
+  const notice = await screen.findByText('Os convites deste evento estão travados.')
+  expect(notice.getAttribute('role')).toBe('status')
+  expect(getCurrentInvitation).toHaveBeenLastCalledWith('42', expect.any(AbortSignal))
+  expect(screen.queryByRole('img', { name: 'QR code do convite de responsável' })).toBeNull()
+  expect(screen.queryByRole('textbox', { name: 'Link do convite' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Copiar link' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Substituir convite' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Gerar convite' })).toBeNull()
+})
