@@ -3,14 +3,15 @@ import { environment } from '../../config/environment'
 import type { GuestAccessNotice, GuestIdentification } from '../guest-identification/GuestIdentificationForm'
 import { GuestIdentificationStep, type GuestIdentificationConfirmation } from '../guest-identification/GuestIdentificationStep'
 import { PublicEventPage } from '../public-event/PublicEventPage'
+import { mediaSubmissionIssues } from '../submissions/mediaSubmissionService'
 import { photoSubmissionDisabledCode, photoSubmissionUnavailableMessage } from '../submissions/photoSubmissionService'
 import { SubmissionIdentification } from '../submissions/SubmissionIdentification'
 import { SubmissionProgress } from '../submissions/SubmissionProgress'
 import { SubmissionReceipt } from '../submissions/SubmissionReceipt'
+import { useAudioSubmission } from '../submissions/useAudioSubmission'
 import { usePhotoSubmission } from '../submissions/usePhotoSubmission'
 import { useTextSubmission } from '../submissions/useTextSubmission'
 import { useVideoSubmission } from '../submissions/useVideoSubmission'
-import { videoRejectedCode, videoSubmissionDisabledCode, videoSubmissionUnavailableMessage } from '../submissions/videoSubmissionService'
 import { DraftDiscardDialog } from './DraftDiscardDialog'
 import { identifyContribution, type ContributionCategory } from './guestContribution'
 import { ContributionMediaPreview, MediaFileEditor } from './MediaFileEditor'
@@ -33,7 +34,7 @@ type Step =
   | { kind: 'identified'; contribution: ReviewedContribution & { identification: GuestIdentification }; remembered: boolean; proof: string | null }
 
 function canSubmit(contribution: ReviewedContribution) {
-  return contribution.format === 'text' || ((contribution.format === 'photo' || contribution.format === 'video') && !!environment.submissionUploadOrigin)
+  return contribution.format === 'text' || !!environment.submissionUploadOrigin
 }
 
 type PendingExit = { href: string | null; trigger: HTMLElement | null }
@@ -77,16 +78,17 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
   const photoSubmission = usePhotoSubmission(eventCode, releaseConfirmedPhoto)
   const photoView = photoSubmission.view
   const clearMedia = media.clear
-  const releaseConfirmedVideo = useCallback(() => {
+  const releaseConfirmedMedia = useCallback(() => {
     clearMedia()
     setCaption(null)
     setExit(null)
     setStep({ kind: 'choose' })
   }, [clearMedia])
-  const videoSubmission = useVideoSubmission(eventCode, releaseConfirmedVideo)
-  const videoView = videoSubmission.view
-  const mediaFormat = videoView.kind === 'idle' ? 'photo' : 'video'
-  const mediaSubmission = mediaFormat === 'photo' ? photoSubmission : videoSubmission
+  const videoSubmission = useVideoSubmission(eventCode, releaseConfirmedMedia)
+  const audioSubmission = useAudioSubmission(eventCode, releaseConfirmedMedia)
+  const mediaSubmissions = { photo: photoSubmission, video: videoSubmission, audio: audioSubmission }
+  const mediaFormat = audioSubmission.view.kind !== 'idle' ? 'audio' : videoSubmission.view.kind !== 'idle' ? 'video' : 'photo'
+  const mediaSubmission = mediaSubmissions[mediaFormat]
   const mediaView = mediaSubmission.view
   const mediaInProgress = mediaView.kind !== 'idle' && mediaView.kind !== 'confirmed' && mediaView.kind !== 'error'
   const submission = useTextSubmission(eventCode, releaseConfirmedDraft)
@@ -144,10 +146,15 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     if (contribution) setStep({ kind: 'review', contribution })
   }
 
-  function edit(format: ReviewedContribution['format']) {
+  function resetSubmissions() {
     submission.reset()
     photoSubmission.reset()
     videoSubmission.reset()
+    audioSubmission.reset()
+  }
+
+  function edit(format: ReviewedContribution['format']) {
+    resetSubmissions()
     if (format === 'text') setStep({ kind: 'write' })
     else if (format === 'photo') setStep({ kind: 'photos' })
     else setStep({ kind: 'media', media: format })
@@ -161,9 +168,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     selection.clear()
     recording.cancel()
     media.clear()
-    submission.reset()
-    photoSubmission.reset()
-    videoSubmission.reset()
+    resetSubmissions()
     setStep({ kind: 'choose' })
     if (href) {
       confirmedExit.current = true
@@ -191,6 +196,15 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
         category: contribution.category,
         file: contribution.media.file,
         declaredMediaType: mediaMime(contribution.media.container, 'video'),
+        caption: contribution.caption,
+        identification,
+      })
+    } else if (contribution.format === 'audio' && contribution.category === 'testimonial' && environment.submissionUploadOrigin
+      && !media.previewFailed && (audioSubmission.view.kind !== 'error' || audioSubmission.view.code !== mediaSubmissionIssues.audio.disabledCode)) {
+      audioSubmission.send({
+        category: contribution.category,
+        file: contribution.media.file,
+        declaredMediaType: mediaMime(contribution.media.container, 'audio'),
         caption: contribution.caption,
         identification,
       })
@@ -244,9 +258,11 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
 
         const identifying = step.kind === 'identify' && open && (canSubmit(step.contribution) || notice)
         const format = 'contribution' in step && step.contribution.format
-        const view = format === 'photo' ? photoView : format === 'video' ? videoView : submission.view
+        const view = format && format !== 'text' ? mediaSubmissions[format].view : submission.view
         const error = view.kind === 'error' ? view : null
         const renew = error?.code === 'SUBMISSION_CONSENT_REQUIRED'
+        const mediaIssues = format === 'audio' || format === 'video' ? mediaSubmissionIssues[format] : null
+        const blockedMedia = mediaIssues && (media.previewFailed || error?.code === mediaIssues.rejectedCode || error?.code === mediaIssues.disabledCode)
         return (
           <section className="testimonial">
             <p className="testimonial-event">{event.name}</p>
@@ -314,21 +330,19 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                 {step.kind === 'identified' && <p role="status">Identificação confirmada.{!step.remembered && ' Nome e concordância estão disponíveis apenas nesta página.'}</p>}
                 {error && <p role="alert" className="testimonial-error">{error.message}</p>}
                 {step.contribution.format === 'photo' && !environment.submissionUploadOrigin && <p role="status">{photoSubmissionUnavailableMessage}</p>}
-                {step.contribution.format === 'video' && !environment.submissionUploadOrigin && <p role="status">{videoSubmissionUnavailableMessage}</p>}
+                {mediaIssues && !environment.submissionUploadOrigin && <p role="status">{mediaIssues.unavailableMessage}</p>}
                 <div className="testimonial-actions">
                   <button className="testimonial-secondary" type="button" onClick={() => edit(step.contribution.format)}>
                     {{ text: 'Editar texto', photo: 'Editar fotos e legenda', video: 'Editar vídeo e legenda', audio: 'Editar áudio e legenda' }[step.contribution.format]}
                   </button>
                   {open && (notice || canSubmit(step.contribution)) && (step.kind === 'review' || renew) && !media.previewFailed && (
                     <button type="button" onClick={() => {
-                      submission.reset()
-                      photoSubmission.reset()
-                      videoSubmission.reset()
+                      resetSubmissions()
                       setStep({ kind: 'identify', contribution: step.contribution })
                     }}>Confirmar identificação</button>
                   )}
                   <button type="button" disabled={!open || renew || error?.code === 'PHOTO_REJECTED' || error?.code === photoSubmissionDisabledCode
-                    || error?.code === videoRejectedCode || error?.code === videoSubmissionDisabledCode || (format === 'video' && media.previewFailed)
+                    || !!blockedMedia
                     || step.kind !== 'identified' || !step.proof || !canSubmit(step.contribution)} onClick={send}>Enviar</button>
                 </div>
               </>
