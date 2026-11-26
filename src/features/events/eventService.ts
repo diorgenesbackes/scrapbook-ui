@@ -39,7 +39,7 @@ function detail(payload: unknown): EventDetail | null {
   const value = object(payload)
   const event = summary(value)
   if (!value || !event) return null
-  const { welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt } = value
+  const { welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt, canEditDetails } = value
   const policy = object(value.openingPolicy)
   const version = value.version
   if (!policy || typeof version !== 'string' || !/^[0-9]+$/.test(version)) return null
@@ -49,9 +49,10 @@ function detail(payload: unknown): EventDetail | null {
       || (mode !== 'immediate' && mode !== 'scheduled')
       || (mode === 'scheduled' ? typeof opensOn !== 'string' : opensOn !== null)
       || (state !== 'flexible' && state !== 'scheduled_locked' && state !== 'immediate_once')
-      || typeof canEdit !== 'boolean' || (opensOn !== null && typeof opensOn !== 'string')) return null
+      || typeof canEditDetails !== 'boolean' || typeof canEdit !== 'boolean'
+      || (opensOn !== null && typeof opensOn !== 'string')) return null
   return { ...event, version, welcomeMessage, submissionOpensAt, submissionClosesAt, completionDeadlineAt,
-    usesDefaultWelcomeMessage: value.usesDefaultWelcomeMessage !== false, canEditDetails: value.canEditDetails === true,
+    usesDefaultWelcomeMessage: value.usesDefaultWelcomeMessage !== false, canEditDetails,
     openingPolicy: { mode, opensOn, state, canEdit } }
 }
 
