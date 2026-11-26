@@ -17,7 +17,7 @@ type PhotoDraft = {
 export type PhotoSubmissionView =
   | { kind: 'idle' | 'preparing' | 'checking' | 'validating' | 'reconciling' }
   | { kind: 'transferring'; loaded: number; total: number; completionDeadlineAt: string | null }
-  | { kind: 'interrupted' | 'paused'; canRetry: boolean; pendingPositions?: number[] }
+  | { kind: 'interrupted' | 'paused' | 'awaiting-receipt'; canRetry: boolean; pendingPositions?: number[] }
   | Extract<PhotoStatus, { kind: 'error' | 'confirmed' | 'expired' }>
 
 type PreparedPhoto = { file: File; manifest: PhotoManifest }
@@ -27,7 +27,7 @@ type PendingPhoto = {
   total: number
   pendingPositions: Set<number>
   uploadedPositions: Set<number>
-  stage: 'admission' | 'transfer' | 'paused' | 'completion' | 'validation' | 'reconciliation'
+  stage: 'admission' | 'transfer' | 'paused' | 'completion' | 'evidence' | 'validation' | 'reconciliation'
   completionDeadlineAt: string | null
   retryAt: number
 }
@@ -66,7 +66,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
     const moment = submission.draft.category === 'moment'
     const read = () => readPhotoSubmission(eventCode, submission, signal)
 
-    function interrupted(kind: 'interrupted' | 'paused') {
+    function recovery(kind: 'interrupted' | 'paused' | 'awaiting-receipt') {
       setView({
         kind, canRetry: performance.now() >= current.retryAt,
         ...(moment ? { pendingPositions: [...current.pendingPositions] } : {}),
@@ -76,7 +76,8 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
     function wait() {
       if (current.stage === 'reconciliation') setView({ kind: 'reconciling' })
       else if (current.stage === 'validation') setView({ kind: 'validating' })
-      else interrupted(current.stage === 'paused' ? 'paused' : 'interrupted')
+      else if (current.stage === 'evidence') recovery('awaiting-receipt')
+      else recovery(current.stage === 'paused' ? 'paused' : 'interrupted')
     }
 
     function accept(status: PhotoStatus): boolean {
@@ -85,20 +86,23 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
         case 'receiving':
           if (current.stage === 'admission') current.stage = 'transfer'
           current.completionDeadlineAt = status.completionDeadlineAt ?? current.completionDeadlineAt
-          current.pendingPositions = new Set(status.pendingPositions.filter(position => !current.uploadedPositions.has(position)))
+          current.pendingPositions = new Set(status.pendingPositions)
+          if (current.stage === 'completion' && moment) {
+            current.stage = current.pendingPositions.size ? 'evidence' : 'validation'
+          }
           return true
         case 'validating':
           current.stage = 'validation'
           break
         case 'unknown':
           current.retryAt = performance.now() + status.retryAfterMs
-          if (current.stage !== 'reconciliation' && current.stage !== 'paused') {
-            interrupted('interrupted')
+          if (current.stage !== 'reconciliation' && current.stage !== 'paused' && current.stage !== 'evidence') {
+            recovery('interrupted')
             return false
           }
           break
         case 'error':
-          if (status.code === photoSubmissionDisabledCode && (current.stage === 'transfer' || current.stage === 'paused')) {
+          if (status.code === photoSubmissionDisabledCode && (current.stage === 'transfer' || current.stage === 'paused' || current.stage === 'evidence')) {
             current.stage = 'paused'
             break
           }
@@ -135,8 +139,11 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
         return 'cancelled'
       }
       current.stage = 'transfer'
-      const received = current.files.reduce((bytes, photo) =>
-        bytes + (current.pendingPositions.has(photo.manifest.position) ? 0 : photo.file.size), 0)
+      const received = current.files.reduce((bytes, photo) => {
+        const position = photo.manifest.position
+        const acknowledged = !current.pendingPositions.has(position) || current.uploadedPositions.has(position)
+        return bytes + (position !== manifest.position && acknowledged ? photo.file.size : 0)
+      }, 0)
       const progress = (loaded: number) => {
         if (!signal.aborted) setView({
           kind: 'transferring', loaded: received + loaded, total: current.total, completionDeadlineAt: current.completionDeadlineAt,
@@ -189,7 +196,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
       return
     }
 
-    if (current.stage === 'transfer' || current.stage === 'paused') {
+    if (current.stage === 'transfer' || current.stage === 'paused' || current.stage === 'evidence') {
       if (!await transfer() || signal.aborted) return
       current.stage = 'completion'
     }
@@ -200,13 +207,14 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
     if (status.kind === 'missing' || (status.kind === 'unknown' && !status.retryAfterMs)) {
       if (accept(await read())) wait()
     } else if (accept(status)) {
-      current.stage = 'validation'
+      if (!moment) current.stage = 'validation'
       wait()
     }
   }, [eventCode, onConfirmed])
 
   useEffect(() => {
-    if (view.kind !== 'interrupted' && view.kind !== 'paused' && view.kind !== 'validating' && view.kind !== 'reconciling') return
+    if (view.kind !== 'interrupted' && view.kind !== 'paused' && view.kind !== 'awaiting-receipt'
+      && view.kind !== 'validating' && view.kind !== 'reconciling') return
     const timer = window.setInterval(() => {
       const current = attempt.current
       if (current) void execute(signal => run(current, 'poll', signal))
