@@ -4,14 +4,20 @@ from pathlib import Path
 import re
 
 
-def package(directory, api_origin, sha, version):
+https_origin = r"https://(?:[a-z0-9][a-z0-9-]*\.)+[a-z][a-z0-9-]*"
+
+
+def package(directory, api_origin, sha, version, submission_upload_origin=""):
     if not re.fullmatch(r"https://[a-z0-9][a-z0-9.-]+\.[a-z][a-z0-9-]+", api_origin):
         raise ValueError("Configure a origem HTTPS da API.")
+    if submission_upload_origin and not re.fullmatch(https_origin, submission_upload_origin):
+        raise ValueError("Configure a origem HTTPS do armazenamento de envio.")
     if not (directory / "index.html").is_file():
         raise ValueError("Execute o build antes de preparar o artefato.")
+    connect_origins = " ".join(origin for origin in ("'self'", api_origin, submission_upload_origin) if origin)
     csp = (
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
-        f"connect-src 'self' {api_origin}; object-src 'none'; base-uri 'self'; "
+        "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+        f"connect-src {connect_origins}; object-src 'none'; base-uri 'self'; "
         "frame-ancestors 'none'; form-action 'self'"
     )
     headers = {
@@ -39,9 +45,10 @@ def main():
     parser.add_argument("api_origin")
     parser.add_argument("sha")
     parser.add_argument("version")
+    parser.add_argument("--submission-upload-origin", default="")
     args = parser.parse_args()
     try:
-        package(args.directory, args.api_origin, args.sha, args.version)
+        package(args.directory, args.api_origin, args.sha, args.version, args.submission_upload_origin)
     except (ValueError, OSError) as error:
         parser.error(str(error))
 

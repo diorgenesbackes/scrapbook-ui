@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { readPhoto, type PhotoIssue, type SelectedPhoto } from './photoFiles'
 
 type RejectedPhoto = { name: string; issue: PhotoIssue }
@@ -37,9 +37,9 @@ export function usePhotoSelection(maximum: number) {
     }
   }, [])
 
-  function release(url: string) {
+  const release = useCallback((url: string) => {
     if (urls.current.delete(url)) URL.revokeObjectURL(url)
-  }
+  }, [])
 
   async function select(files: readonly File[], replacement?: SelectedPhoto) {
     if (active.current || files.length === 0) return
@@ -102,14 +102,14 @@ export function usePhotoSelection(maximum: number) {
     setPhotos(items => items.filter(item => item.id !== photo.id))
   }
 
-  function clear() {
+  const clear = useCallback(() => {
     active.current?.abort()
     active.current = null
     for (const url of urls.current) release(url)
     setPhotos([])
     setRejected([])
     setBusy(false)
-  }
+  }, [release])
 
   return { photos, rejected, busy, select, remove, clear, dismissRejected: () => setRejected([]) }
 }
