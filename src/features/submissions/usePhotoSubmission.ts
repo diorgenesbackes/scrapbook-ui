@@ -4,7 +4,7 @@ import {
   authorizePhotoUpload, completePhotoSubmission, photoSubmissionDisabledCode, readPhotoSubmission, submitPhoto,
   type PhotoCategory, type PhotoManifest, type PhotoStatus, type PhotoSubmission,
 } from './photoSubmissionService'
-import { uploadPhoto } from './photoUpload'
+import { uploadFile } from './submissionUpload'
 import { newSubmissionAttempt, type SubmissionAttempt, type SubmissionIdentificationData } from './submissionService'
 
 type PhotoDraft = {
@@ -153,7 +153,7 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
         })
       }
       progress(0)
-      return uploadPhoto(authorization, file, signal, progress)
+      return uploadFile(authorization, file, signal, progress)
     }
 
     async function transfer() {
