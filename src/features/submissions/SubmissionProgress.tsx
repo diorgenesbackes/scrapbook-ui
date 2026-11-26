@@ -1,6 +1,7 @@
 import type { PhotoCategory } from './photoSubmissionService'
 import type { PhotoSubmissionView } from './usePhotoSubmission'
-import type { VideoSubmissionView } from './useVideoSubmission'
+import type { MediaUploadFormat } from './mediaSubmissionService'
+import type { MediaSubmissionView } from './useMediaSubmission'
 
 const brasilia = new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
 
@@ -15,13 +16,19 @@ function PhotoPositions({ positions, label }: { positions: readonly number[] | u
 }
 
 export function SubmissionProgress({ view, category, format = 'photo', onRetry }: {
-  view: PhotoSubmissionView | VideoSubmissionView
+  view: PhotoSubmissionView | MediaSubmissionView
   category: PhotoCategory
-  format?: 'photo' | 'video'
+  format?: 'photo' | MediaUploadFormat
   onRetry: () => void
 }) {
-  const subject = format === 'video' ? 'o vídeo' : category === 'moment' ? 'o conjunto de fotos' : 'a foto'
-  const transfer = format === 'video' ? 'Transferência do vídeo' : category === 'moment' ? 'Transferência do conjunto de fotos' : 'Transferência da foto'
+  const subject = { audio: 'o áudio', video: 'o vídeo', photo: category === 'moment' ? 'o conjunto de fotos' : 'a foto' }[format]
+  const transfer = {
+    audio: 'Transferência do áudio',
+    video: 'Transferência do vídeo',
+    photo: category === 'moment' ? 'Transferência do conjunto de fotos' : 'Transferência da foto',
+  }[format]
+  const plural = { audio: 'áudios', video: 'vídeos', photo: 'fotos' }[format]
+  const receiving = { audio: 'do áudio', video: 'do vídeo', photo: 'do conjunto de fotos' }[format]
   switch (view.kind) {
     case 'preparing':
       return <p role="status">Preparando {subject} para envio.</p>
@@ -48,11 +55,9 @@ export function SubmissionProgress({ view, category, format = 'photo', onRetry }
       return (
         <>
           <p role="status">{{
-            paused: format === 'video'
-              ? 'O envio de vídeos está temporariamente indisponível. Estamos verificando o estado do envio.'
-              : 'O envio de fotos está temporariamente indisponível. Estamos verificando o estado do envio.',
+            paused: 'O envio de ' + plural + ' está temporariamente indisponível. Estamos verificando o estado do envio.',
             interrupted: 'O envio foi interrompido. Tente novamente.',
-            'awaiting-receipt': 'Estamos verificando o recebimento ' + (format === 'video' ? 'do vídeo.' : 'do conjunto de fotos.'),
+            'awaiting-receipt': 'Estamos verificando o recebimento ' + receiving + '.',
           }[view.kind]}</p>
           {'pendingPositions' in view && <PhotoPositions positions={view.pendingPositions} label="Fotos a transferir" />}
           <button type="button" onClick={onRetry} disabled={!view.canRetry}>Tentar novamente</button>

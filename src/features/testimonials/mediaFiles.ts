@@ -1,3 +1,4 @@
+import { maxAudioBytes } from '../submissions/mediaSubmissionService'
 import { maxVideoBytes } from '../submissions/videoParts'
 import { mediaCaptionLimit, type ContributionCategory } from './guestContribution'
 import { countContributionCharacters } from './testimonialText'
@@ -26,7 +27,7 @@ export const mediaAccept = {
 }
 
 export function mediaLimits(category: ContributionCategory, kind: MediaKind) {
-  return { bytes: kind === 'audio' ? 50_000_000 : maxVideoBytes, seconds: category === 'moment' ? 60 : 300 }
+  return { bytes: kind === 'audio' ? maxAudioBytes : maxVideoBytes, seconds: category === 'moment' ? 60 : 300 }
 }
 
 export function validateMediaSize(category: ContributionCategory, kind: MediaKind, bytes: number): MediaIssue | null {

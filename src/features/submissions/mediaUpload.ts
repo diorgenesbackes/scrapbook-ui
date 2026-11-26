@@ -1,16 +1,16 @@
 import type { SubmissionAttempt } from './submissionService'
 import { uploadFile } from './submissionUpload'
 import { videoPartCount, videoPartSizeBytes } from './videoParts'
-import { authorizeVideoUpload, type VideoFailure, type VideoSubmission, type VideoUploadStatus } from './videoSubmissionService'
+import { authorizeMediaUpload, type MediaFailure, type MediaSubmission, type MediaUploadStatus } from './mediaSubmissionService'
 
-type TransferResult = VideoFailure | { kind: 'transferred' } | { kind: 'interrupted' }
+type TransferResult = MediaFailure | { kind: 'transferred' } | { kind: 'interrupted' }
 
-export async function uploadVideo(
-  eventCode: string, attempt: SubmissionAttempt<VideoSubmission>, file: File, status: VideoUploadStatus, signal: AbortSignal,
+export async function uploadMedia(
+  eventCode: string, attempt: SubmissionAttempt<MediaSubmission>, file: File, status: MediaUploadStatus, signal: AbortSignal,
   progress: (loaded: number) => void,
 ): Promise<TransferResult> {
   const multipart = status.mode === 'multipart'
-  const parts = Array.from({ length: videoPartCount(file.size) }, (_, index) => {
+  const parts = Array.from({ length: multipart ? videoPartCount(file.size) : 1 }, (_, index) => {
     const start = multipart ? index * videoPartSizeBytes : 0
     const end = multipart ? Math.min(file.size, start + videoPartSizeBytes) : file.size
     return { number: index + 1, start, end, size: end - start }
@@ -20,7 +20,7 @@ export async function uploadVideo(
   for (const part of parts) {
     if (signal.aborted) return { kind: 'cancelled' }
     if (status.uploadedParts.has(part.number)) continue
-    const grant = await authorizeVideoUpload(eventCode, attempt, multipart ? part.number : null, signal)
+    const grant = await authorizeMediaUpload(eventCode, attempt, multipart ? part.number : null, signal)
     if (signal.aborted) return { kind: 'cancelled' }
     if (grant.kind !== 'authorized') return grant
     const bytes = multipart ? file.slice(part.start, part.end) : file
