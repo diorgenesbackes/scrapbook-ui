@@ -10,10 +10,18 @@ if [[ ! "$VITE_API_BASE_URL" =~ $origin_pattern || ! "$UI_ORIGIN" =~ $origin_pat
     exit 1
 fi
 [[ "${VITE_ENABLE_LOCAL_DIAGNOSTICS:-false}" == false ]]
+VITE_SUBMISSION_UPLOAD_ORIGIN=${VITE_SUBMISSION_UPLOAD_ORIGIN:-}
+if [[ -n "$VITE_SUBMISSION_UPLOAD_ORIGIN" && ! "$VITE_SUBMISSION_UPLOAD_ORIGIN" =~ $origin_pattern ]]; then
+    echo 'Configure a origem HTTPS do armazenamento de envio.' >&2
+    exit 1
+fi
+export VITE_SUBMISSION_UPLOAD_ORIGIN
 export VITE_PUBLIC_SITE_ORIGIN="$UI_ORIGIN"
 npm ci
 npm run build
-python3 .github/scripts/package_amplify.py dist "$VITE_API_BASE_URL" "$GITHUB_SHA" "$RELEASE_VERSION"
+python3 .github/scripts/package_amplify.py dist "$VITE_API_BASE_URL" "$GITHUB_SHA" "$RELEASE_VERSION" \
+    --submission-upload-origin "$VITE_SUBMISSION_UPLOAD_ORIGIN"
 (cd dist && zip -q -r ../site.zip .)
 digest=$(shasum -a 256 site.zip | cut -d ' ' -f 1)
-printf 'sha256=%s\napi_origin=%s\nui_origin=%s\n' "$digest" "$VITE_API_BASE_URL" "$VITE_PUBLIC_SITE_ORIGIN" >> "$GITHUB_OUTPUT"
+printf 'sha256=%s\napi_origin=%s\nui_origin=%s\nsubmission_upload_origin=%s\n' \
+    "$digest" "$VITE_API_BASE_URL" "$VITE_PUBLIC_SITE_ORIGIN" "$VITE_SUBMISSION_UPLOAD_ORIGIN" >> "$GITHUB_OUTPUT"
