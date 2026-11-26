@@ -1,10 +1,44 @@
-import type { PhotoUploadAuthorization } from './photoSubmissionService'
+import { environment } from '../../config/environment'
+import { isSubmissionInstant, submissionObject } from './submissionService'
 
 type Result = 'transferred' | 'authorization-failed' | 'interrupted' | 'cancelled'
 const inactivityLimit = 30_000
 
-export function uploadPhoto(
-  authorization: PhotoUploadAuthorization, file: File, signal: AbortSignal, progress: (loaded: number) => void,
+type UploadAuthorization = {
+  kind: 'authorized'
+  url: string
+  mediaType: string | null
+  checksum: string
+  expiresAt: string
+}
+
+function uploadUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !environment.submissionUploadOrigin) return null
+  try {
+    const url = new URL(value)
+    const http = url.protocol === 'https:' || url.protocol === 'http:'
+    return http && url.origin === environment.submissionUploadOrigin && !url.username && !url.password && !url.hash
+      ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function readUploadAuthorization(value: unknown, mediaType: string | null, checksum: string): UploadAuthorization | null {
+  const grant = submissionObject(value)
+  if (grant?.method !== 'PUT' || !isSubmissionInstant(grant.expiresAt)) return null
+  const url = uploadUrl(grant.url)
+  const headers = Object.entries(submissionObject(grant.headers) ?? {})
+  const authorizedType = headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1]
+  const authorizedChecksum = headers.find(([name]) => name.toLowerCase() === 'x-amz-checksum-sha256')?.[1]
+  const hasExpectedType = mediaType === null ? authorizedType === undefined : authorizedType === mediaType
+  return url && headers.length === (mediaType === null ? 1 : 2) && hasExpectedType && authorizedChecksum === checksum
+    ? { kind: 'authorized', url, mediaType, checksum, expiresAt: grant.expiresAt }
+    : null
+}
+
+export function uploadFile(
+  authorization: UploadAuthorization, file: Blob, signal: AbortSignal, progress: (loaded: number) => void,
 ): Promise<Result> {
   return new Promise(resolve => {
     if (signal.aborted) {
@@ -65,7 +99,7 @@ export function uploadPhoto(
       xhr.onabort = () => finish('cancelled')
       signal.addEventListener('abort', abort, { once: true })
       xhr.open('PUT', authorization.url)
-      xhr.setRequestHeader('Content-Type', authorization.mediaType)
+      if (authorization.mediaType !== null) xhr.setRequestHeader('Content-Type', authorization.mediaType)
       xhr.setRequestHeader('x-amz-checksum-sha256', authorization.checksum)
       resetWatchdog()
       xhr.send(file)

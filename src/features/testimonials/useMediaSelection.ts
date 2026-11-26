@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ContributionCategory } from './guestContribution'
 import { mediaMime, readMediaContainer, validateMediaSize, type MediaIssue, type MediaKind, type SelectedMedia } from './mediaFiles'
 import { probeMedia } from './mediaPreview'
@@ -11,14 +11,14 @@ export function useMediaSelection(category: ContributionCategory) {
   const active = useRef<AbortController | null>(null)
   const acceptedUrl = useRef<string | null>(null)
 
-  function release() {
+  const release = useCallback(() => {
     active.current?.abort()
     active.current = null
     if (acceptedUrl.current) URL.revokeObjectURL(acceptedUrl.current)
     acceptedUrl.current = null
-  }
+  }, [])
 
-  useEffect(() => release, [])
+  useEffect(() => release, [release])
 
   async function select(file: File | undefined, kind: MediaKind, recording?: AbortSignal): Promise<SelectedMedia | null> {
     if (!file || active.current || recording?.aborted) return null
@@ -62,13 +62,13 @@ export function useMediaSelection(category: ContributionCategory) {
     }
   }
 
-  function clear() {
+  const clear = useCallback(() => {
     release()
     setSelected(null)
     setIssue(null)
     setBusy(false)
     setPreviewFailed(false)
-  }
+  }, [release])
 
   return { selected, issue, busy, previewFailed, select, clear, keepSelection: () => setIssue(null), setPreviewFailed }
 }

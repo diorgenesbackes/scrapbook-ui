@@ -20,6 +20,7 @@ export type AttemptResult =
 
 const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|\+00:00)$/
 export const submissionBase = (code: string) => '/api/v1/public-events/' + encodeURIComponent(code)
+export const submissionAttemptPath = (code: string, attempt: SubmissionCredential) => submissionBase(code) + '/submissions/' + attempt.key
 
 export function submissionObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -90,5 +91,5 @@ export async function submitText(code: string, attempt: SubmissionAttempt, signa
 }
 
 export async function readSubmission(code: string, attempt: SubmissionAttempt, signal: AbortSignal) {
-  return attemptResult(await getJson(submissionBase(code) + '/submissions/' + attempt.key, signal, 'omit', attempt.authorization))
+  return attemptResult(await getJson(submissionAttemptPath(code, attempt), signal, 'omit', attempt.authorization))
 }
