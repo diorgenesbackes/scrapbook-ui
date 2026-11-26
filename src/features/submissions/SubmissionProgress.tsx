@@ -59,6 +59,7 @@ export function SubmissionProgress({ view, category, onRetry }: {
     case 'expired':
       return (
         <div role="alert" className="testimonial-error">
+          {category === 'moment' && <p>O conjunto não foi enviado. Confira os arquivos indicados.</p>}
           <p>O prazo para concluir este envio terminou.</p>
           <PhotoPositions positions={view.problemPositions} label="Fotos cujo recebimento ficou pendente" />
         </div>
