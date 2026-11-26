@@ -272,10 +272,11 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                   <section className="testimonial-preview" aria-label="Prévia do depoimento"><p>{step.contribution.text}</p></section>
                 ) : step.contribution.format === 'photo' ? (
                   <section className="testimonial-preview" aria-label="Prévia das fotos">
-                    <PhotoThumbnails photos={selection.photos} controls={(_, index) => (
-                      photoView.kind === 'error' && photoView.problemPositions?.includes(index + 1)
-                        ? <p className="testimonial-error">Foto {index + 1}. {photoView.problemMessage}</p> : null
-                    )} />
+                    <PhotoThumbnails photos={selection.photos} controls={(_, index) => {
+                      const problem = photoView.kind === 'error'
+                        ? photoView.photoProblems?.find(({ position }) => position === index + 1) : undefined
+                      return problem ? <p className="testimonial-error">Foto {index + 1}. {problem.message}</p> : null
+                    }} />
                     {step.contribution.caption && <p>{step.contribution.caption}</p>}
                   </section>
                 ) : media.selected && (

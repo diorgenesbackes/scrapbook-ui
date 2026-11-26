@@ -94,6 +94,9 @@ export function usePhotoSubmission(eventCode: string, onConfirmed: () => void) {
         case 'validating':
           current.stage = 'validation'
           break
+        case 'reconciling':
+          current.stage = 'reconciliation'
+          break
         case 'unknown':
           current.retryAt = performance.now() + status.retryAfterMs
           if (current.stage !== 'reconciliation' && current.stage !== 'paused' && current.stage !== 'evidence') {

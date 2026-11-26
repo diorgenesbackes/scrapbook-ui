@@ -303,26 +303,57 @@ it('consulta de novo antes de retomar e transfere apenas a posição ainda pende
   ])
 })
 
+it('passa a apenas consultar o momento ao receber o estado de reconciliação do servidor', async () => {
+  vi.useFakeTimers()
+  fetchApi
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(authorize('first'))
+    .mockResolvedValueOnce(receivingMoment([2]))
+    .mockResolvedValueOnce(Response.json({ state: 'reconciling' }))
+    .mockResolvedValueOnce(confirmed())
+  const onConfirmed = vi.fn()
+  const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
+
+  await act(async () => result.current.send(momentDraft))
+  await act(async () => PhotoRequest.requests[0]!.finish(200))
+  expect(result.current.view.kind).toBe('awaiting-receipt')
+  await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+  expect(result.current.view).toEqual({ kind: 'reconciling' })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+  expect(result.current.view).toEqual({ kind: 'confirmed', confirmedAt })
+  expect(onConfirmed).toHaveBeenCalledOnce()
+  const { url, uploads } = expectMomentAttempt()
+  expect(fetchApi.mock.calls.map(([path]) => path)).toEqual([api, uploads[1], url + '/completion', url, url])
+})
+
 it.each([
-  { state: 'rejected', code: 'photo-invalid', problemPositions: [2], kind: 'error' },
+  { state: 'rejected', code: 'photo-invalid', problemPositions: [2, 3], kind: 'error' },
   { state: 'expired', code: 'submission-deadline-exceeded', problemPositions: [2, 3], kind: 'expired' },
 ])('preserva as posições afetadas no estado terminal $state', async ({ state, code, problemPositions, kind }) => {
   fetchApi
     .mockResolvedValueOnce(receivingMoment([2, 3]))
     .mockResolvedValueOnce(authorize('second'))
-    .mockResolvedValueOnce(Response.json({ state, code, problemPositions }))
+    .mockResolvedValueOnce(Response.json({ state, code, problems: problemPositions.map(position => ({
+      position, code: state === 'rejected' && position === 3 ? 'photo-resource-budget' : code,
+    })) }))
   const onConfirmed = vi.fn()
   const { result } = renderHook(() => usePhotoSubmission('event', onConfirmed))
 
   await act(async () => result.current.send(momentDraft))
   await act(async () => PhotoRequest.requests[0]!.onerror?.())
 
-  expect(result.current.view).toMatchObject({ kind, problemPositions })
+  expect(result.current.view).toMatchObject({ kind })
   if (state === 'rejected') {
     expect(result.current.view).toMatchObject({
       code: 'PHOTO_REJECTED',
       message: 'O conjunto não foi enviado. Confira os arquivos indicados.',
+      photoProblems: [
+        { position: 2, message: 'A foto não passou na validação. Confira o arquivo ou escolha outra foto.' },
+        { position: 3, message: 'A foto excedeu os limites de processamento. Escolha outro arquivo.' },
+      ],
     })
+  } else {
+    expect(result.current.view).toMatchObject({ problemPositions })
   }
   await act(async () => result.current.retry())
 

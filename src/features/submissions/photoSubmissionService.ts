@@ -25,15 +25,18 @@ export type PhotoSubmission = {
   identification: SubmissionIdentificationData
 }
 
+type PhotoProblem = { position: number; code: string }
+type PhotoProblemMessage = { position: number; message: string }
+
 type Failure =
   | { kind: 'unknown'; retryAfterMs: number }
   | { kind: 'missing' | 'cancelled' }
-  | { kind: 'error'; code: string; message: string; problemPositions?: number[]; problemMessage?: string }
+  | { kind: 'error'; code: string; message: string; photoProblems?: PhotoProblemMessage[] }
 
 export type PhotoStatus =
   | Failure
   | { kind: 'receiving'; completionDeadlineAt: string | null; pendingPositions: number[] }
-  | { kind: 'validating' }
+  | { kind: 'validating' | 'reconciling' }
   | { kind: 'expired'; problemPositions?: number[] }
   | { kind: 'confirmed'; confirmedAt: string }
 
@@ -87,6 +90,17 @@ function positions(value: unknown, maximum: number): number[] | null {
   return [...result].sort((left, right) => left - right)
 }
 
+function photoProblems(value: unknown, maximum: number): PhotoProblem[] | null {
+  if (!Array.isArray(value)) return null
+  const problems: PhotoProblem[] = []
+  for (const item of value) {
+    const problem = submissionObject(item)
+    if (typeof problem?.position !== 'number' || typeof problem.code !== 'string') return null
+    problems.push({ position: problem.position, code: problem.code })
+  }
+  return positions(problems.map(problem => problem.position), maximum) ? problems : null
+}
+
 function status(response: Response, draft: PhotoSubmission): PhotoStatus {
   if (response.kind !== 'ok') return failure(response, draft.category)
   const result = submissionObject(response.payload)
@@ -100,11 +114,12 @@ function status(response: Response, draft: PhotoSubmission): PhotoStatus {
       break
     }
     case 'validating':
+    case 'reconciling':
       return { kind: result.state }
     case 'expired': {
       if (!moment) return { kind: 'expired' }
-      const problemPositions = positions(result.problemPositions, draft.files.length)
-      if (problemPositions) return { kind: 'expired', problemPositions }
+      const problems = photoProblems(result.problems, draft.files.length)
+      if (problems) return { kind: 'expired', problemPositions: problems.map(problem => problem.position) }
       break
     }
     case 'confirmed':
@@ -112,12 +127,15 @@ function status(response: Response, draft: PhotoSubmission): PhotoStatus {
       break
     case 'rejected': {
       if (!moment) return { kind: 'error', code: 'PHOTO_REJECTED', message: 'A foto foi rejeitada. Confira o arquivo e escolha outra foto.' }
-      const problemPositions = positions(result.problemPositions, draft.files.length)
-      if (problemPositions) return {
+      const problems = photoProblems(result.problems, draft.files.length)
+      if (problems) return {
         kind: 'error', code: 'PHOTO_REJECTED', message: 'O conjunto não foi enviado. Confira os arquivos indicados.',
-        problemPositions, problemMessage: result.code === 'photo-resource-budget'
-          ? 'A foto excedeu os limites de processamento. Escolha outro arquivo.'
-          : 'A foto não passou na validação. Confira o arquivo ou escolha outra foto.',
+        photoProblems: problems.map(({ position, code }) => ({
+          position,
+          message: code === 'photo-resource-budget'
+            ? 'A foto excedeu os limites de processamento. Escolha outro arquivo.'
+            : 'A foto não passou na validação. Confira o arquivo ou escolha outra foto.',
+        })),
       }
       break
     }
