@@ -53,3 +53,19 @@ it('recupera a tentativa perdida com o token mantido em memória', async () => {
   expect((await screen.findByRole('alert')).textContent).toContain('Este convite já foi usado.')
   expect(vi.mocked(acceptInvitation).mock.calls.map(args => args[0])).toEqual([token, token])
 })
+
+it('revalida a prévia ao retornar à página e retira evento e aceite após a trava', async () => {
+  window.history.replaceState(null, '', entry + '#' + token)
+  vi.mocked(previewInvitation).mockResolvedValueOnce(preview)
+    .mockResolvedValue({ kind: 'problem', reason: 'locked' })
+  render(<InvitationEntryPage />)
+
+  await screen.findByRole('heading', { name: 'Celebração sintética' })
+  window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+
+  expect((await screen.findByRole('alert')).textContent).toContain('Os convites deste evento estão travados.')
+  expect(screen.queryByRole('heading', { name: 'Celebração sintética' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Aceitar convite' })).toBeNull()
+  expect(previewInvitation).toHaveBeenCalledTimes(2)
+  expect(acceptInvitation).not.toHaveBeenCalled()
+})
