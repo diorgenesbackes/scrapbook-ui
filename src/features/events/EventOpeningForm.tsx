@@ -11,7 +11,7 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
   onUpdated: (event: EventDetail) => void
   onAccessLost: (kind: 'expired' | 'not-found') => void
 }) {
-  const [expectedVersion, setExpectedVersion] = useState(event.version)
+  const [basis, setBasis] = useState(event)
   const [mode, setMode] = useState(event.openingPolicy.mode)
   const [date, setDate] = useState(event.openingPolicy.opensOn ?? suggestOpeningDate(event.startsAt))
   const [status, setStatus] = useState<Status>('idle')
@@ -20,11 +20,15 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
   const saveButton = useRef<HTMLButtonElement>(null)
   useEffect(() => () => pending.current?.abort(), [])
 
+  const samePolicy = event.openingPolicy.mode === basis.openingPolicy.mode
+    && event.openingPolicy.opensOn === basis.openingPolicy.opensOn
+  const expectedVersion = !event.canEditDetails && samePolicy ? event.version : basis.version
+
   async function refreshVersion(signal: AbortSignal, after: 'conflict' | 'locked') {
     const latest = await getEvent(event.id, signal)
     if (signal.aborted) return
     if (latest.kind === 'ready') {
-      setExpectedVersion(latest.data.version)
+      setBasis(latest.data)
       onUpdated(latest.data)
       setStatus(after)
     } else if (latest.kind === 'expired' || latest.kind === 'not-found') {
@@ -47,12 +51,13 @@ export function EventOpeningForm({ event, onUpdated, onAccessLost }: {
   }
 
   function save() {
+    if (!event.openingPolicy.canEdit || status === 'load-version') return
     return run(async signal => {
       const response = await replaceEventOpening(event.id, { mode, opensOn: mode === 'scheduled' ? date : null },
         expectedVersion, signal)
       if (signal.aborted) return
       if (response.kind === 'ready') {
-        setExpectedVersion(response.data.version)
+        setBasis(response.data)
         onUpdated(response.data)
         setMode(response.data.openingPolicy.mode)
         setDate(response.data.openingPolicy.opensOn ?? suggestOpeningDate(response.data.startsAt))

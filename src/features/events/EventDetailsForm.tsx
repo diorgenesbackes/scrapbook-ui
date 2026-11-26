@@ -4,7 +4,7 @@ import { getEvent, replaceEventDetails, type EventDetail } from './eventService'
 import { WelcomeMessageField } from './WelcomeMessageField'
 
 type Status =
-  | { kind: 'idle' | 'busy' | 'saved' | 'conflict' | 'load-version' | 'locked' | 'failed' }
+  | { kind: 'idle' | 'busy' | 'saved' | 'conflict' | 'load-version' | 'failed' }
   | { kind: 'invalid'; fields: string[] }
 
 function draftFrom(event: EventDetail) {
@@ -12,9 +12,10 @@ function draftFrom(event: EventDetail) {
     welcomeMessage: event.usesDefaultWelcomeMessage ? null : event.welcomeMessage }
 }
 
-export function EventDetailsForm({ event, onUpdated, onAccessLost }: {
+export function EventDetailsForm({ event, onUpdated, onLocked, onAccessLost }: {
   event: EventDetail
   onUpdated: (event: EventDetail) => void
+  onLocked: () => void
   onAccessLost: (kind: 'expired' | 'not-found') => void
 }) {
   const [draft, setDraft] = useState(() => draftFrom(event))
@@ -23,17 +24,17 @@ export function EventDetailsForm({ event, onUpdated, onAccessLost }: {
   const pending = useRef<AbortController | null>(null)
   useEffect(() => () => pending.current?.abort(), [])
 
-  async function refreshVersion(signal: AbortSignal, after: 'conflict' | 'locked') {
+  async function refreshVersion(signal: AbortSignal) {
     const current = await getEvent(event.id, signal)
     if (signal.aborted) return
     if (current.kind === 'ready') {
       setExpectedVersion(current.data.version)
       onUpdated(current.data)
-      setStatus({ kind: after })
+      setStatus({ kind: 'conflict' })
     } else if (current.kind === 'expired' || current.kind === 'not-found') {
       onAccessLost(current.kind)
     } else {
-      setStatus({ kind: after === 'locked' ? 'locked' : 'load-version' })
+      setStatus({ kind: 'load-version' })
     }
   }
 
@@ -62,7 +63,8 @@ export function EventDetailsForm({ event, onUpdated, onAccessLost }: {
         onUpdated(result.data)
         setStatus({ kind: 'saved' })
       } else if (result.kind === 'conflict' || result.kind === 'locked') {
-        await refreshVersion(signal, result.kind)
+        if (result.kind === 'locked') onLocked()
+        await refreshVersion(signal)
       } else if (result.kind === 'expired' || result.kind === 'not-found') {
         onAccessLost(result.kind)
       } else {
@@ -71,7 +73,7 @@ export function EventDetailsForm({ event, onUpdated, onAccessLost }: {
     })
   }
 
-  const locked = !event.canEditDetails || status.kind === 'locked'
+  const locked = !event.canEditDetails
   const nameInvalid = status.kind === 'invalid' && status.fields.includes('name')
   const startInvalid = status.kind === 'invalid' && status.fields.includes('startsAt')
 
@@ -103,7 +105,7 @@ export function EventDetailsForm({ event, onUpdated, onAccessLost }: {
           {status.kind === 'load-version' && (
             <>
               <p role="alert">Não foi possível consultar a versão atual. Seu rascunho foi preservado.</p>
-              <button type="button" onClick={() => void run(signal => refreshVersion(signal, 'conflict'))}>Consultar versão atual</button>
+              <button type="button" onClick={() => void run(refreshVersion)}>Consultar versão atual</button>
             </>
           )}
           {status.kind === 'failed' && <p role="alert">Serviço temporariamente indisponível. Tente novamente em instantes.</p>}
