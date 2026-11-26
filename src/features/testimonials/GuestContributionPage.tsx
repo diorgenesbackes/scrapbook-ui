@@ -31,11 +31,7 @@ type Step =
   | { kind: 'identified'; contribution: ReviewedContribution & { identification: GuestIdentification }; remembered: boolean; proof: string | null }
 
 function canSubmit(contribution: ReviewedContribution) {
-  return contribution.format === 'text' || (isPhotoTestimonial(contribution) && !!environment.submissionUploadOrigin)
-}
-
-function isPhotoTestimonial(contribution: ReviewedContribution): contribution is ReviewedPhotos & { category: 'testimonial' } {
-  return contribution.format === 'photo' && contribution.category === 'testimonial'
+  return contribution.format === 'text' || (contribution.format === 'photo' && !!environment.submissionUploadOrigin)
 }
 
 type PendingExit = { href: string | null; trigger: HTMLElement | null }
@@ -166,11 +162,13 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     const identification = { guestName, noticeCode, consentProof: step.proof }
     if (contribution.format === 'text') {
       submission.send({ category: 'testimonial', format: 'text', text: contribution.text, identification })
-    } else if (isPhotoTestimonial(contribution) && environment.submissionUploadOrigin
+    } else if (contribution.format === 'photo' && environment.submissionUploadOrigin
       && (photoView.kind !== 'error' || photoView.code !== photoSubmissionDisabledCode)) {
-      const photo = contribution.photos[0]
-      if (photo) photoSubmission.send({
-        file: photo.file, declaredMediaType: 'image/' + photo.format, caption: contribution.caption, identification,
+      photoSubmission.send({
+        category: contribution.category,
+        files: contribution.photos.map(({ file, format }) => ({ file, declaredMediaType: 'image/' + format })),
+        caption: contribution.caption,
+        identification,
       })
     }
   }
@@ -184,9 +182,9 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
     return (
       <section className="testimonial">
         {eventName && <p className="testimonial-event">{eventName}</p>}
-        <h1 ref={heading} tabIndex={-1}>Envio do depoimento</h1>
+        <h1 ref={heading} tabIndex={-1}>{category === 'moment' ? 'Envio do momento' : 'Envio do depoimento'}</h1>
         {windowMessage && <p role="status">{windowMessage}</p>}
-        <SubmissionProgress view={photoView} onRetry={photoSubmission.retry} />
+        <SubmissionProgress view={photoView} category={category} onRetry={photoSubmission.retry} />
         <div className="testimonial-actions">
           <a href={'/e/' + eventCode}>Voltar ao evento</a>
           {dirty && discardButton()}
@@ -196,7 +194,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
   }
 
   function photoReceipt(confirmedAt: string, open: boolean) {
-    return <SubmissionReceipt eventCode={eventCode} confirmedAt={confirmedAt} open={open} onRestart={photoSubmission.reset} />
+    return <SubmissionReceipt eventCode={eventCode} confirmedAt={confirmedAt} open={open} category={category} onRestart={photoSubmission.reset} />
   }
 
   const renderPendingPhoto = photoView.kind === 'confirmed' ? () => photoReceipt(photoView.confirmedAt, false)
@@ -274,7 +272,11 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                   <section className="testimonial-preview" aria-label="Prévia do depoimento"><p>{step.contribution.text}</p></section>
                 ) : step.contribution.format === 'photo' ? (
                   <section className="testimonial-preview" aria-label="Prévia das fotos">
-                    <PhotoThumbnails photos={selection.photos} />
+                    <PhotoThumbnails photos={selection.photos} controls={(_, index) => {
+                      const problem = photoView.kind === 'error'
+                        ? photoView.photoProblems?.find(({ position }) => position === index + 1) : undefined
+                      return problem ? <p className="testimonial-error">Foto {index + 1}. {problem.message}</p> : null
+                    }} />
                     {step.contribution.caption && <p>{step.contribution.caption}</p>}
                   </section>
                 ) : media.selected && (
@@ -286,7 +288,7 @@ export function GuestContributionPage({ eventCode, category, notice }: { eventCo
                 )}
                 {step.kind === 'identified' && <p role="status">Identificação confirmada.{!step.remembered && ' Nome e concordância estão disponíveis apenas nesta página.'}</p>}
                 {error && <p role="alert" className="testimonial-error">{error.message}</p>}
-                {isPhotoTestimonial(step.contribution) && !environment.submissionUploadOrigin && <p role="status">{photoSubmissionUnavailableMessage}</p>}
+                {step.contribution.format === 'photo' && !environment.submissionUploadOrigin && <p role="status">{photoSubmissionUnavailableMessage}</p>}
                 <div className="testimonial-actions">
                   <button className="testimonial-secondary" type="button" onClick={() => edit(step.contribution.format)}>
                     {{ text: 'Editar texto', photo: 'Editar fotos e legenda', video: 'Editar vídeo e legenda', audio: 'Editar áudio e legenda' }[step.contribution.format]}

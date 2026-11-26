@@ -3,10 +3,11 @@ import { getPublicEvent } from '../public-event/publicEventService'
 
 const brasilia = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
 
-export function SubmissionReceipt({ eventCode, confirmedAt, open, onRestart }: {
+export function SubmissionReceipt({ eventCode, confirmedAt, open, category = 'testimonial', onRestart }: {
   eventCode: string
   confirmedAt: string
   open: boolean
+  category?: 'testimonial' | 'moment'
   onRestart: () => void
 }) {
   const [another, setAnother] = useState(false)
@@ -28,8 +29,17 @@ export function SubmissionReceipt({ eventCode, confirmedAt, open, onRestart }: {
       <p><time dateTime={confirmedAt}>{brasilia.format(new Date(confirmedAt))}</time> · Horário de Brasília</p>
       {open && another && (
         <div className="testimonial-actions">
-          <button type="button" onClick={onRestart}>Deixar outro depoimento</button>
-          <a href={'/e/' + eventCode + '/momento'}>Registrar um momento</a>
+          {category === 'moment' ? (
+            <>
+              <a href={'/e/' + eventCode + '/depoimento'}>Deixar outro depoimento</a>
+              <button type="button" onClick={onRestart}>Registrar um momento</button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={onRestart}>Deixar outro depoimento</button>
+              <a href={'/e/' + eventCode + '/momento'}>Registrar um momento</a>
+            </>
+          )}
         </div>
       )}
       <a href={'/e/' + eventCode}>Voltar ao evento</a>
