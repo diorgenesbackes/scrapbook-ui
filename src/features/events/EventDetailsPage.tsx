@@ -1,21 +1,59 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { showCivil } from '../../utils/showCivil'
-import { getEvent } from './eventService'
+import { getEvent, type EventDetail } from './eventService'
 import { EventDetailsForm } from './EventDetailsForm'
 import { EventOpeningForm } from './EventOpeningForm'
+import { watchPageResume } from './watchPageResume'
 import cover from '../../assets/default-cover.jpg'
 import './events.css'
 
 export function EventDetailsPage({ eventId }: { eventId: string }) {
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<Awaited<ReturnType<typeof getEvent>> | null>(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    void getEvent(eventId, controller.signal).then(value => {
-      if (!controller.signal.aborted) setResult(value)
+  const updateEvent = useCallback((data: EventDetail) => {
+    setResult(current => {
+      if (current?.kind === 'expired' || current?.kind === 'not-found') return current
+      if (current?.kind === 'ready' && (BigInt(data.version) < BigInt(current.data.version)
+        || (!current.data.canEditDetails && data.canEditDetails))) return current
+      return { kind: 'ready', data }
     })
-    return () => controller.abort()
-  }, [eventId, attempt])
+  }, [])
+
+  function lockDetails() {
+    setResult(current => current?.kind === 'ready'
+      ? { kind: 'ready', data: { ...current.data, canEditDetails: false } }
+      : current)
+  }
+
+  function clearEvent(kind: 'expired' | 'not-found') {
+    setResult({ kind })
+  }
+
+  useEffect(() => {
+    let request: AbortController | null = null
+
+    async function refresh() {
+      if (request) return
+      const controller = new AbortController()
+      request = controller
+      try {
+        const value = await getEvent(eventId, controller.signal)
+        if (controller.signal.aborted) return
+        if (value.kind === 'ready') updateEvent(value.data)
+        else if (value.kind === 'expired' || value.kind === 'not-found') clearEvent(value.kind)
+        else setResult(current => current ?? value)
+      } finally {
+        request = null
+      }
+    }
+
+    const stopWatching = watchPageResume(() => void refresh())
+    void refresh()
+    return () => {
+      stopWatching()
+      request?.abort()
+    }
+  }, [eventId, attempt, updateEvent])
 
   return (
     <main id="conteudo" className="main event-page" tabIndex={-1}>
@@ -35,11 +73,9 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
           </dl>
           <p><a href={'/meus-eventos/' + result.data.id + '/lembrancas'}>Ver lembranças</a></p>
           <p><a href={'/meus-eventos/' + result.data.id + '/compartilhar'}>Compartilhar com convidados</a></p>
-          <p><a href={'/meus-eventos/' + result.data.id + '/convidar'}>Convidar responsável</a></p>
-          <EventDetailsForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
-            onAccessLost={kind => setResult({ kind })} />
-          <EventOpeningForm key={result.data.id} event={result.data} onUpdated={data => setResult({ kind: 'ready', data })}
-            onAccessLost={kind => setResult({ kind })} />
+          {result.data.canEditDetails && <p><a href={'/meus-eventos/' + result.data.id + '/convidar'}>Convidar responsável</a></p>}
+          <EventDetailsForm event={result.data} onUpdated={updateEvent} onLocked={lockDetails} onAccessLost={clearEvent} />
+          <EventOpeningForm event={result.data} onUpdated={updateEvent} onAccessLost={clearEvent} />
         </>
       ) : (
         <>

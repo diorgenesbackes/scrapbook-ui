@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { QrCode } from '../../components/QrCode'
 import { environment } from '../../config/environment'
 import { useLinkClipboard } from '../../hooks/useLinkClipboard'
 import { useQrCode } from '../../hooks/useQrCode'
 import { invitationUrl } from '../../utils/invitationUrl'
 import { createInvitation, getCurrentInvitation, type Invitation, type InvitationResult } from './invitationService'
+import { watchPageResume } from './watchPageResume'
 import './invitation.css'
 
 type InvitationView = InvitationResult | { kind: 'loading' | 'issuing' | 'uncertain' }
@@ -65,50 +66,70 @@ function InvitationShare({ url }: { url: string }) {
 
 export function EventInvitationPage({ eventId }: { eventId: string }) {
   const [view, setView] = useState<InvitationView>({ kind: 'loading' })
-  const [reloads, setReloads] = useState(0)
   const operation = useRef<AbortController | null>(null)
   const requestKey = useRef<string | null>(null)
   const busy = view.kind === 'loading' || view.kind === 'issuing'
 
-  useEffect(() => {
-    const request = new AbortController()
-    void getCurrentInvitation(eventId, request.signal).then(result => {
-      if (!request.signal.aborted) setView(result)
-    })
-    return () => request.abort()
-  }, [eventId, reloads])
-
-  useEffect(() => () => operation.current?.abort(), [eventId])
-
-  function reload() {
-    requestKey.current = null
-    setView({ kind: 'loading' })
-    setReloads(count => count + 1)
-  }
-
-  async function issue() {
-    if (operation.current || busy) return
-    if (typeof crypto.randomUUID !== 'function') {
-      setView({ kind: 'failed' })
-      return
-    }
-    const key = requestKey.current ?? crypto.randomUUID()
+  async function run(action: (signal: AbortSignal) => Promise<void>) {
+    if (operation.current) return
     const request = new AbortController()
     operation.current = request
-    requestKey.current = key
-    setView({ kind: 'issuing' })
     try {
-      const result = await createInvitation(eventId, key, request.signal)
-      if (request.signal.aborted) return
+      await action(request.signal)
+    } finally {
+      if (operation.current === request) operation.current = null
+    }
+  }
+
+  function reload() {
+    void run(async signal => {
+      setView({ kind: 'loading' })
+      const result = await getCurrentInvitation(eventId, signal)
+      if (!signal.aborted) setView(result)
+    })
+  }
+
+  const loadInvitation = useEffectEvent(reload)
+  const resume = useEffectEvent(() => {
+    if (view.kind === 'available' || view.kind === 'pending' || view.kind === 'full') reload()
+  })
+
+  useEffect(() => {
+    loadInvitation()
+    const stopWatching = watchPageResume(() => resume())
+    return () => {
+      stopWatching()
+      operation.current?.abort()
+      operation.current = null
+      requestKey.current = null
+    }
+  }, [eventId])
+
+  function issue() {
+    void run(async signal => {
+      if (typeof crypto.randomUUID !== 'function') {
+        setView({ kind: 'failed' })
+        return
+      }
+
+      const key = requestKey.current ?? crypto.randomUUID()
+      requestKey.current = key
+      setView({ kind: 'issuing' })
+      const result = await createInvitation(eventId, key, signal)
+      if (signal.aborted) return
       if (result.kind === 'failed') {
         setView({ kind: 'uncertain' })
-      } else {
-        requestKey.current = null
-        setView(result)
+        return
       }
-    } finally {
-      operation.current = null
-    }
+
+      requestKey.current = null
+      setView(result)
+      if (result.kind !== 'locked' && result.kind !== 'unavailable' && result.kind !== 'full') return
+
+      const current = await getCurrentInvitation(eventId, signal)
+      if (signal.aborted || current.kind === 'failed') return
+      if (result.kind !== 'locked' || current.kind === 'session' || current.kind === 'not-found') setView(current)
+    })
   }
 
   return (
