@@ -48,7 +48,7 @@ async function requestJson(path: string, options: {
   }
 
   if (response.status === 204) return { kind: 'empty' }
-  const retryAfter = response.status === 429 ? response.headers.get('Retry-After') : null
+  const retryAfter = [429, 503].includes(response.status) ? response.headers.get('Retry-After') : null
 
   try {
     const payload: unknown = await response.json()

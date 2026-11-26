@@ -6,10 +6,12 @@ COPY index.html tsconfig.json vite.config.ts ./
 COPY src/ ./src/
 ARG VITE_API_BASE_URL=
 ARG VITE_ENABLE_LOCAL_DIAGNOSTICS=false
-RUN npm run build
+ARG VITE_SUBMISSION_UPLOAD_ORIGIN=
+COPY nginx/ ./nginx/
+RUN node nginx/configure.mjs && npm run build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /src/nginx/compiled.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist/ /usr/share/nginx/html/
 USER 101
 EXPOSE 8080
