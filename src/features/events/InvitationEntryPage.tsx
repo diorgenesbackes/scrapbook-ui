@@ -26,6 +26,7 @@ export function InvitationEntryPage() {
     return isInvitationToken(fragment) ? fragment : null
   })
   const [view, setView] = useState<EntryView>(token ? { kind: 'loading' } : { kind: 'problem', reason: 'unavailable' })
+  const [refreshing, setRefreshing] = useState(false)
   const operation = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -45,18 +46,23 @@ export function InvitationEntryPage() {
     }
   }
 
-  function retryPreview() {
+  function retryPreview(background = false) {
     if (!token) return
     void run(async signal => {
-      setView({ kind: 'loading' })
-      const result = await previewInvitation(token, signal)
-      if (!signal.aborted) setView(result)
+      setRefreshing(background)
+      if (!background) setView({ kind: 'loading' })
+      try {
+        const result = await previewInvitation(token, signal)
+        if (!signal.aborted) setView(result)
+      } finally {
+        if (!signal.aborted) setRefreshing(false)
+      }
     })
   }
 
   const loadPreview = useEffectEvent(retryPreview)
   const resume = useEffectEvent(() => {
-    if (view.kind === 'eligible') retryPreview()
+    if (view.kind === 'eligible') retryPreview(true)
   })
 
   useEffect(() => {
@@ -84,7 +90,7 @@ export function InvitationEntryPage() {
     })
   }
 
-  const busy = view.kind === 'loading' || view.kind === 'accepting'
+  const busy = refreshing || view.kind === 'loading' || view.kind === 'accepting'
 
   return (
     <main id="conteudo" className="main event-page" tabIndex={-1} aria-busy={busy}>
@@ -94,7 +100,7 @@ export function InvitationEntryPage() {
         <section aria-label="Evento convidado">
           <h2>{view.eventName}</h2>
           <p>Válido até <time dateTime={view.expiresAt}>{expiryFormatter.format(new Date(view.expiresAt))}</time> (horário de Brasília).</p>
-          <button type="button" onClick={() => void accept()}>Aceitar convite</button>
+          <button type="button" aria-disabled={refreshing || undefined} onClick={() => void accept()}>Aceitar convite</button>
         </section>
       )}
       {view.kind === 'accepting' && <p role="status">Aceitando convite…</p>}
@@ -110,7 +116,7 @@ export function InvitationEntryPage() {
       {view.kind === 'problem' && (
         <>
           <p role="alert">{messages[view.reason]}</p>
-          {view.reason === 'failed' && <button type="button" onClick={retryPreview}>Tentar novamente</button>}
+          {view.reason === 'failed' && <button type="button" onClick={() => retryPreview()}>Tentar novamente</button>}
           {view.reason === 'linked' && <p><a href="/meus-eventos">Abrir Meus eventos</a></p>}
         </>
       )}

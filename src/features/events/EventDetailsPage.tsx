@@ -13,8 +13,13 @@ export function EventDetailsPage({ eventId }: { eventId: string }) {
   const updateEvent = useCallback((data: EventDetail) => {
     setResult(current => {
       if (current?.kind === 'expired' || current?.kind === 'not-found') return current
-      if (current?.kind === 'ready' && (BigInt(data.version) < BigInt(current.data.version)
-        || (!current.data.canEditDetails && data.canEditDetails))) return current
+      if (current?.kind === 'ready') {
+        const version = BigInt(data.version)
+        const currentVersion = BigInt(current.data.version)
+        if (version < currentVersion || (!current.data.canEditDetails && data.canEditDetails)) return current
+        if (version === currentVersion && current.data.openingPolicy.state !== 'flexible'
+          && data.openingPolicy.state === 'flexible') return current
+      }
       return { kind: 'ready', data }
     })
   }, [])

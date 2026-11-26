@@ -14,7 +14,11 @@ const expiryFormatter = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short',
 })
 
-function PendingInvitation({ invitation, onReplace }: { invitation: Invitation; onReplace: () => void }) {
+function PendingInvitation({ invitation, refreshing, onReplace }: {
+  invitation: Invitation
+  refreshing: boolean
+  onReplace: () => void
+}) {
   const url = invitationUrl(invitation.token, environment.publicSiteOrigin, window.location.origin)
   const [confirming, setConfirming] = useState(false)
   const replaceButton = useRef<HTMLButtonElement>(null)
@@ -32,13 +36,13 @@ function PendingInvitation({ invitation, onReplace }: { invitation: Invitation; 
   return (
     <section aria-label="Convite pendente">
       <p>Válido até <time dateTime={invitation.expiresAt}>{expiryFormatter.format(new Date(invitation.expiresAt))}</time> (horário de Brasília).</p>
-      {url ? <InvitationShare url={url} /> : <p role="alert">O endereço do convite está indisponível neste ambiente.</p>}
+      {url ? <InvitationShare url={url} refreshing={refreshing} /> : <p role="alert">O endereço do convite está indisponível neste ambiente.</p>}
       <button type="button" ref={replaceButton} aria-expanded={confirming} aria-controls={confirming ? 'invitation-replacement' : undefined}
-        onClick={() => setConfirming(value => !value)}>Substituir convite</button>
+        aria-disabled={refreshing || undefined} onClick={() => { if (!refreshing) setConfirming(value => !value) }}>Substituir convite</button>
       {confirming && (
         <fieldset className="invitation-confirm" id="invitation-replacement">
           <legend>O convite anterior deixará de funcionar.</legend>
-          <button type="button" onClick={onReplace} ref={confirmButton}>Confirmar substituição</button>
+          <button type="button" aria-disabled={refreshing || undefined} onClick={onReplace} ref={confirmButton}>Confirmar substituição</button>
           <button type="button" onClick={cancel}>Cancelar</button>
         </fieldset>
       )}
@@ -46,7 +50,7 @@ function PendingInvitation({ invitation, onReplace }: { invitation: Invitation; 
   )
 }
 
-function InvitationShare({ url }: { url: string }) {
+function InvitationShare({ url, refreshing }: { url: string; refreshing: boolean }) {
   const clipboard = useLinkClipboard(url)
   const qr = useQrCode(url)
   return (
@@ -54,7 +58,7 @@ function InvitationShare({ url }: { url: string }) {
       <label htmlFor="invitation-link">Link do convite</label>
       <div className="invitation-controls">
         <input id="invitation-link" type="text" inputMode="url" readOnly value={url} ref={clipboard.field} spellCheck={false} />
-        <button type="button" onClick={() => void clipboard.copy()}>Copiar link</button>
+        <button type="button" aria-disabled={refreshing || undefined} onClick={() => { if (!refreshing) void clipboard.copy() }}>Copiar link</button>
       </div>
       <p role="status">{clipboard.feedback}</p>
       {qr.kind === 'loading' && <p role="status">Preparando QR code…</p>}
@@ -66,9 +70,10 @@ function InvitationShare({ url }: { url: string }) {
 
 export function EventInvitationPage({ eventId }: { eventId: string }) {
   const [view, setView] = useState<InvitationView>({ kind: 'loading' })
+  const [refreshing, setRefreshing] = useState(false)
   const operation = useRef<AbortController | null>(null)
   const requestKey = useRef<string | null>(null)
-  const busy = view.kind === 'loading' || view.kind === 'issuing'
+  const busy = refreshing || view.kind === 'loading' || view.kind === 'issuing'
 
   async function run(action: (signal: AbortSignal) => Promise<void>) {
     if (operation.current) return
@@ -81,17 +86,22 @@ export function EventInvitationPage({ eventId }: { eventId: string }) {
     }
   }
 
-  function reload() {
+  function reload(background = false) {
     void run(async signal => {
-      setView({ kind: 'loading' })
-      const result = await getCurrentInvitation(eventId, signal)
-      if (!signal.aborted) setView(result)
+      setRefreshing(background)
+      if (!background) setView({ kind: 'loading' })
+      try {
+        const result = await getCurrentInvitation(eventId, signal)
+        if (!signal.aborted) setView(result)
+      } finally {
+        if (!signal.aborted) setRefreshing(false)
+      }
     })
   }
 
   const loadInvitation = useEffectEvent(reload)
   const resume = useEffectEvent(() => {
-    if (view.kind === 'available' || view.kind === 'pending' || view.kind === 'full') reload()
+    if (view.kind === 'available' || view.kind === 'pending' || view.kind === 'full') reload(true)
   })
 
   useEffect(() => {
@@ -138,10 +148,10 @@ export function EventInvitationPage({ eventId }: { eventId: string }) {
       {view.kind === 'loading' && <p role="status">Consultando convite…</p>}
       {view.kind === 'issuing' && <p role="status">Gerando convite…</p>}
       {view.kind === 'available' && (
-        <button type="button" onClick={() => void issue()}>Gerar convite</button>
+        <button type="button" aria-disabled={refreshing || undefined} onClick={() => void issue()}>Gerar convite</button>
       )}
       {view.kind === 'pending' && (
-        <PendingInvitation key={view.invitation.id} invitation={view.invitation} onReplace={() => void issue()} />
+        <PendingInvitation key={view.invitation.id} invitation={view.invitation} refreshing={refreshing} onReplace={() => void issue()} />
       )}
       {view.kind === 'locked' && <p role="status">Os convites deste evento estão travados.</p>}
       {view.kind === 'full' && <p role="status">Este evento já tem dois responsáveis.</p>}
@@ -149,7 +159,7 @@ export function EventInvitationPage({ eventId }: { eventId: string }) {
       {view.kind === 'not-found' && <p role="alert">Evento indisponível para esta conta.</p>}
       {view.kind === 'unavailable' && <p role="alert">Este convite não está mais disponível. Atualize a consulta.</p>}
       {view.kind === 'failed' && <p role="alert">Serviço temporariamente indisponível.</p>}
-      {(view.kind === 'unavailable' || view.kind === 'failed') && <button type="button" onClick={reload}>Atualizar convite</button>}
+      {(view.kind === 'unavailable' || view.kind === 'failed') && <button type="button" onClick={() => reload()}>Atualizar convite</button>}
       {view.kind === 'uncertain' && (
         <>
           <p role="alert">Não foi possível confirmar a emissão. Recupere a tentativa para consultar o convite.</p>

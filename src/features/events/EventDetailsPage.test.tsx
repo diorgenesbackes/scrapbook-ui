@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { getJson, putJson } from '../../lib/httpClient'
 import { EventDetailsPage } from './EventDetailsPage'
@@ -69,3 +69,26 @@ it.each(['EVENT_VERSION_CONFLICT', 'EVENT_LOCKED'])(
       { mode: 'scheduled', opensOn: '2032-03-10', expectedVersion: '2' }, expect.any(AbortSignal))
   },
 )
+
+it('preserva o bloqueio de abertura quando uma consulta anterior retorna a mesma versão', async () => {
+  const previous = { kind: 'ok', payload: event } as const
+  let resolve!: (value: Awaited<ReturnType<typeof getJson>>) => void
+  const delayed = new Promise<Awaited<ReturnType<typeof getJson>>>(complete => { resolve = complete })
+  const closed = { ...event, openingPolicy: { ...event.openingPolicy, state: 'scheduled_locked', canEdit: false } }
+  vi.mocked(getJson).mockResolvedValueOnce(previous).mockReturnValueOnce(delayed)
+    .mockResolvedValueOnce({ kind: 'ok', payload: closed })
+  vi.mocked(putJson).mockResolvedValueOnce({ kind: 'http', status: 409,
+    payload: { code: 'EVENT_OPENING_LOCKED' }, retryAfter: null })
+  render(<EventDetailsPage eventId="42" />)
+
+  fireEvent.change(await screen.findByLabelText('Data de abertura das lembranças'), { target: { value: '2032-03-10' } })
+  fireEvent.focus(window)
+  expect(getJson).toHaveBeenCalledTimes(2)
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar abertura' }))
+  await screen.findByText('A data de abertura deste evento está travada.')
+  expect(getJson).toHaveBeenCalledTimes(3)
+
+  await act(async () => resolve(previous))
+  expect(screen.getByText('A data de abertura deste evento está travada.').getAttribute('role')).toBe('status')
+  expect(screen.getByRole('group', { name: 'Política de abertura' }).hasAttribute('disabled')).toBe(true)
+})

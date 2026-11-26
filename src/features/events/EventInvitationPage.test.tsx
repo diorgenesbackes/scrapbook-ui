@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { EventInvitationPage } from './EventInvitationPage'
 import { createInvitation, getCurrentInvitation, type InvitationResult } from './invitationService'
@@ -42,6 +42,26 @@ it('mantém o convite na confirmação cancelada e oferece cópia manual', async
   fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
   expect(screen.getByRole('button', { name: 'Substituir convite' })).toBe(document.activeElement)
   expect(createInvitation).not.toHaveBeenCalled()
+})
+
+it('preserva foco e confirmação ao revalidar o mesmo convite', async () => {
+  let resolve!: (value: InvitationResult) => void
+  const delayed = new Promise<InvitationResult>(complete => { resolve = complete })
+  vi.mocked(getCurrentInvitation).mockResolvedValueOnce(pending).mockReturnValueOnce(delayed)
+  render(<EventInvitationPage eventId="42" />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Substituir convite' }))
+  const confirm = screen.getByRole('button', { name: 'Confirmar substituição' })
+
+  fireEvent.focus(window)
+  expect(confirm.getAttribute('aria-disabled')).toBe('true')
+  fireEvent.click(confirm)
+  expect(createInvitation).not.toHaveBeenCalled()
+  expect(document.activeElement).toBe(confirm)
+
+  await act(async () => resolve(pending))
+  expect(screen.getByRole('button', { name: 'Confirmar substituição' })).toBe(confirm)
+  expect(document.activeElement).toBe(confirm)
+  expect(confirm.hasAttribute('aria-disabled')).toBe(false)
 })
 
 it.each([['locked', 'Os convites deste evento estão travados.'], ['full', 'Este evento já tem dois responsáveis.']] as const)(
